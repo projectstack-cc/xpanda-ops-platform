@@ -30,6 +30,9 @@ import {
 } from "./loadingDiagramPdf";
 import { pack, TRAILER_TYPES, DEFAULT_PACK_OPTIONS, HOLEY_BOARD_CATEGORY } from "./packEngine";
 import { thicknessColor } from "./thicknessPalette";
+import { pdfSafe } from "./loadingDiagramPdf";
+import { zonedPack } from "./zonedPack";
+import { FOUR_ZONE, FOUR_ZONE_SKUS } from "./zonedPack.selfcheck";
 
 interface CheckResult {
   name: string;
@@ -108,6 +111,27 @@ function pageText(doc: PDFDocument, index: number): string {
     }
   }
   return out;
+}
+
+/** lbz-v2-03: every content stream of every page, inflated — for the non-zoned golden below. */
+async function allStreams(bytes: Uint8Array): Promise<string> {
+  const doc = await PDFDocument.load(bytes);
+  let out = "";
+  for (let i = 0; i < doc.getPageCount(); i++) {
+    const contents = doc.getPage(i).node.Contents();
+    const ss = contents instanceof PDFArray ? contents.asArray().map((ref) => doc.context.lookup(ref)) : [contents];
+    for (const st of ss) if (st instanceof PDFRawStream) out += Array.from(decodePDFRawStream(st).decode(), (b) => String.fromCharCode(b)).join("");
+  }
+  return out;
+}
+
+function fnv(str: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
 }
 
 export async function runLoadingDiagramPdfSelfCheck(): Promise<{ pass: boolean; results: CheckResult[] }> {
@@ -450,6 +474,50 @@ export async function runLoadingDiagramPdfSelfCheck(): Promise<{ pass: boolean; 
     check("lb-box-03: pieces table colors an edge-only size by its thickness", buildPiecesTable(t0, skus).every((p) => p.color === thicknessColor(Number(p.skuId.replace("EDGE", ""))).bg));
     const pages = (await PDFDocument.load(await buildLoadingDiagramPdf(t0, 0, box, skus))).getPageCount();
     check("lb-box-03: an on-edge trailer's PDF builds (1 page)", pages === 1, String(pages));
+  }
+
+  // lbz-v2-03: zones on the printed diagram. A non-zoned trailer's page is unchanged: its drawn
+  // content and its rects match goldens recorded from main before this change (f851b98 + lbz-v2-02).
+  {
+    const plain = pack(FOUR_ZONE.map(({ skuId, qty }) => ({ skuId, qty })), FOUR_ZONE_SKUS, TRAILER_TYPES["53ft Standard"], DEFAULT_PACK_OPTIONS);
+    const pt = plain.trailers[0];
+    const streams = await allStreams(await buildLoadingDiagramPdf(pt, 0, pt.dims, FOUR_ZONE_SKUS, { runnerHeight: 4, bolNumber: "4511-01", invoiceNumber: "4511", warnings: plain.warnings }));
+    check("lbz-v2-03: non-zoned page content unchanged (golden c467ba32, 54935 bytes)", fnv(streams) === "c467ba32" && streams.length === 54935, `${fnv(streams)} ${streams.length}`);
+    const rects = fnv(JSON.stringify(layoutColumnRects(pt, pt.dims, { x: 66, yTop: 500, width: 660, height: 190 })));
+    check("lbz-v2-03: non-zoned layout rects unchanged (golden f711b66c)", rects === "f711b66c", rects);
+
+    const zplan = zonedPack(FOUR_ZONE, FOUR_ZONE_SKUS, TRAILER_TYPES["53ft Standard"], DEFAULT_PACK_OPTIONS);
+    const zt = zplan.trailers[0];
+    const zdoc = await PDFDocument.load(await buildLoadingDiagramPdf(zt, 0, zt.dims, FOUR_ZONE_SKUS, { bolNumber: "4511-01" }));
+    const ztext = pageText(zdoc, 0);
+    check("lbz-v2-03: zoned PDF prints the load order wall -> doors", ztext.includes("Load order (wall -> doors): ZONE 4 > ZONE 3 > ZONE 2 > ZONE 1"), ztext.split("\n").filter((l) => l.startsWith("Load")).join(" | "));
+    check("lbz-v2-03: zoned PDF prints the legend with pieces", ztext.includes("Zones:") && ztext.includes("ZONE 1 (") && ztext.includes("ZONE 4 ("));
+    check("lbz-v2-03: zoned PDF band labels every zone", ["ZONE 1", "ZONE 2", "ZONE 3", "ZONE 4"].every((z) => ztext.split("\n").includes(z)));
+    const plainPages = (await PDFDocument.load(await buildLoadingDiagramPdf(pt, 0, pt.dims, FOUR_ZONE_SKUS, { bolNumber: "4511-01" }))).getPageCount();
+    check("lbz-v2-03: zoned PDF takes the same pages as the same load unzoned (tables continue as before)", zdoc.getPageCount() === plainPages, `${zdoc.getPageCount()} vs ${plainPages}`);
+    const zstreams = await allStreams(await buildLoadingDiagramPdf(zt, 0, zt.dims, FOUR_ZONE_SKUS));
+    check("lbz-v2-03: zoned PDF draws dashed outlines", /\[3 2\] 0 d/.test(zstreams));
+
+    const sliver = zonedPack(
+      [
+        { skuId: "HB_4", qty: 81, offloadSeq: 1, zoneLabel: "BIG" },
+        { skuId: "HB_6", qty: 10, offloadSeq: 2, zoneLabel: "SLIVER" },
+      ],
+      FOUR_ZONE_SKUS,
+      TRAILER_TYPES["53ft Standard"],
+      DEFAULT_PACK_OPTIONS
+    );
+    const st = pageText(await PDFDocument.load(await buildLoadingDiagramPdf(sliver.trailers[0], 0, sliver.trailers[0].dims, FOUR_ZONE_SKUS)), 0);
+    check("lbz-v2-03: a gap-filled-only zone still gets a label on the print (v2 sliver fix)", st.split("\n").includes("SLIVER") && st.split("\n").includes("BIG"));
+    check("lbz-v2-03: pdfSafe maps non-WinAnsi characters", pdfSafe("Zone \u201cA\u201d \u2192 B\u2014C") === 'Zone "A" ? B-C', pdfSafe("Zone \u201cA\u201d \u2192 B\u2014C"));
+    const odd = zonedPack([{ skuId: "HB_4", qty: 10, offloadSeq: 1, zoneLabel: "Dock \u2192 3" }], FOUR_ZONE_SKUS, TRAILER_TYPES["53ft Standard"], DEFAULT_PACK_OPTIONS);
+    let threw = false;
+    try {
+      await buildLoadingDiagramPdf(odd.trailers[0], 0, odd.trailers[0].dims, FOUR_ZONE_SKUS);
+    } catch {
+      threw = true;
+    }
+    check("lbz-v2-03: a zone label with a non-WinAnsi character doesn't break the PDF", !threw);
   }
 
   return { pass: results.every((r) => r.pass), results };

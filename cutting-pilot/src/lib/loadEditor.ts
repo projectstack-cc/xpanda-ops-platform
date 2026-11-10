@@ -69,6 +69,7 @@ import { validatePlan, skuOrientations, HOLEY_BOARD_CATEGORY, holeyEdgeSlot, HOL
 // neither. See jobPull.ts's own header note; BACKLOG.md's existing "export colorForSku instead of
 // duplicating it" follow-up now has two consumers, not one.
 import { colorForSkuId } from "./jobPull";
+import { UNZONED_LABEL } from "./zonedPack";
 
 export interface EditorState {
   plan: PackPlan;
@@ -135,6 +136,44 @@ function fmtInches(n: number): string {
 
 function approxEq(a: number, b: number): boolean {
   return Math.abs(a - b) <= EPS;
+}
+
+// --- lbz-v2-03: offload zones. A column's zone (zonedPack.ts stamps it) travels with its pieces:
+// cloneColumn spreads, so moves keep it, and every path below that BUILDS a column from a source
+// inherits the source's zone. A column made from nothing (library add, addRow/addColumn, a held stack
+// from the balance) is Unzoned on a zoned load, with no color; on a non-zoned load nothing is stamped.
+// Two zones never share one stack (Steve, 2026-09). ---
+
+export const ZONE_STACK_REASON = "Different zones can't share a stack";
+
+function zoneKey(column: PackColumn): string | null {
+  const s = (column.zoneLabel ?? "").toString().trim();
+  return s ? s : null;
+}
+
+function inheritZone(to: PackColumn, from: PackColumn): void {
+  if (zoneKey(from) === null) return;
+  to.offloadSeq = from.offloadSeq ?? null;
+  to.zoneLabel = from.zoneLabel;
+  if (from.zoneColor !== undefined) to.zoneColor = from.zoneColor;
+}
+
+function isZonedState(state: Pick<EditorState, "plan" | "holding">): boolean {
+  return state.plan.trailers.some((t) => t.rows.some((r) => r.columns.some((c) => zoneKey(c) !== null))) || state.holding.some((c) => zoneKey(c) !== null);
+}
+
+function stampUnzonedIfZoned(column: PackColumn, state: Pick<EditorState, "plan" | "holding">): void {
+  if (!isZonedState(state)) return;
+  column.offloadSeq = null;
+  column.zoneLabel = UNZONED_LABEL;
+}
+
+/** validatePlan's conservation rule reads the first cart line per SKU; a zoned cart has one line per
+ * SKU per zone, so it's merged by SKU first (a no-op for a cart with one line per SKU). */
+function cartBySku(cart: CartLine[]): CartLine[] {
+  const m = new Map<string, number>();
+  for (const c of cart) m.set(c.skuId, (m.get(c.skuId) ?? 0) + c.qty);
+  return Array.from(m.entries()).map(([skuId, qty]) => ({ skuId, qty }));
 }
 
 // --- cloning (deep enough that no mutation below ever leaks back into the caller's plan) ---
@@ -517,7 +556,7 @@ export const CUSTOMIZE_EXEMPT_RULES: ReadonlySet<string> = new Set(["topoff-thre
 
 export function validateForApply(state: EditorState): PackViolation[] {
   const plan = planForApply(state);
-  return validatePlan(plan, state.cart, state.skus, state.options).filter(
+  return validatePlan(plan, cartBySku(state.cart), state.skus, state.options).filter(
     (v) => !CUSTOMIZE_EXEMPT_RULES.has(v.rule)
   );
 }
@@ -593,7 +632,9 @@ function adjustBalance(balance: PackBalance, skuId: string, delta: number): Pack
  * a SKU that ISN'T job-known demand (see EditorState.originalSkuIds's own comment). */
 function growCartForSku(cart: CartLine[], skuId: string, amount: number): CartLine[] {
   const next = cart.map((c) => ({ ...c }));
-  const entry = next.find((c) => c.skuId === skuId);
+  // lbz-v2-03: only the line with no zone (on a zoned cart, the Unzoned line), never the first line
+  // of that SKU in some zone. A non-zoned cart's lines have no zone, so this is the old lookup.
+  const entry = next.find((c) => c.skuId === skuId && !(c.zoneLabel ?? "").toString().trim());
   if (entry) entry.qty += amount;
   else next.push({ skuId, qty: amount });
   return next;
@@ -692,6 +733,7 @@ export function addRow(state: EditorState, trailerIndex: number, skuId: string, 
 
   const plan = clonePlan(state.plan);
   const column = buildColumn(sku, count, state.options);
+  stampUnzonedIfZoned(column, state);
   const row: PackRow = { posFromFront: 0, rowLength: 0, rowWidthUsed: 0, wastedFloorArea: 0, columns: [column], totalUnits: 0, totalWeight: 0 };
   plan.trailers[trailerIndex].rows.push(row);
   plan.balance = adjustBalance(plan.balance, skuId, -count);
@@ -712,6 +754,7 @@ export function addColumn(state: EditorState, trailerIndex: number, rowIndex: nu
 
   const plan = clonePlan(state.plan);
   const column = buildColumn(sku, count, state.options);
+  stampUnzonedIfZoned(column, state);
   // lb-box-03: on-edge columns stay rightmost (the wall slot) — a new stack goes in before them.
   const targetCols = plan.trailers[trailerIndex].rows[rowIndex].columns;
   const firstEdge = targetCols.findIndex((c) => c.onEdge);
@@ -736,6 +779,9 @@ export function addLayer(state: EditorState, ref: ColumnRef, skuId: string, coun
   const sku = state.skus.find((s) => s.id === skuId);
   const existingColumn = getColumn(state.plan, ref);
   if (!sku || !existingColumn || count <= 0 || existingColumn.onEdge) return state;
+  // lbz-v2-03: added pieces have no zone of their own (Unzoned), so they can't top a zone's stack.
+  const targetZone = zoneKey(existingColumn);
+  if (targetZone !== null && targetZone !== UNZONED_LABEL) return state;
 
   const plan = clonePlan(state.plan);
   const column = getColumn(plan, ref)!;
@@ -947,6 +993,7 @@ function splitTop(column: PackColumn, count: number, state: EditorState, dims: D
     mixed: false,
     rationale: `Taken off the top of a stack — ${n} × ${fmtInches(top.unitHeight)}" = ${fmtInches(top.unitHeight * n)}"`,
   };
+  inheritZone(piece, column);
   refreshColumn(piece, state, dims);
   if (n === top.count) column.layers.pop();
   else top.count -= n;
@@ -1047,6 +1094,8 @@ export function evaluateStackTarget(state: EditorState, source: PieceSource, to:
   if (!pieces) return { level: "no", reason: "nothing to move", heightAfter: target.totalHeight };
   if (pieces.onEdge) return { level: "no", reason: EDGE_NO_STACK_REASON, heightAfter: target.totalHeight };
   const heightAfter = target.totalHeight + pieces.totalHeight;
+  // lbz-v2-03: never two zones in one stack (Unzoned onto a zone included). Equal on a non-zoned load.
+  if (zoneKey(pieces) !== zoneKey(target)) return { level: "no", reason: ZONE_STACK_REASON, heightAfter };
 
   const moved = layersOnFootprint(state, pieces, target.colLength, target.colWidth);
   if (!moved) {
@@ -1300,6 +1349,7 @@ export function addToHolding(state: EditorState, sku: PackSku, count: number): E
   for (let left = n; left > 0; left -= perStack) {
     const column = buildColumn(sku, Math.min(perStack, left), state.options);
     column.rationale = `Added from ${source} — ${column.stackCount} × ${fmtInches(unit)}" = ${fmtInches(column.totalHeight)}"`;
+    stampUnzonedIfZoned(column, state);
     refreshColumn(column, introduced, state.dims);
     added.push(column);
   }
@@ -1355,6 +1405,7 @@ export function layFlat(state: EditorState, source: WholeStackSource): EditorSta
   flat.layers[0].color = pieces.layers[0].color;
   flat.rationale = `Laid flat from ${HOLEY_EDGE_LABEL} — ${flat.stackCount} × ${fmtInches(flat.layers[0].unitHeight)}" = ${fmtInches(flat.totalHeight)}"`;
   flat.stackKind = "partial";
+  inheritZone(flat, pieces);
   recomputePlan(plan, state.options);
   return { ...state, plan, holding: [...holding, flat], history: withHistory(state) };
 }
@@ -1409,6 +1460,7 @@ function standColumns(state: EditorState, pieces: PackColumn, sku: PackSku, t: n
       rationale: `${HOLEY_EDGE_LABEL}: ${count} × ${fmtInches(sku.height)}" boards stood ${fmtInches(sku.width)}" tall in the wall slot (Customize)`,
       onEdge: true,
     });
+    inheritZone(out[out.length - 1], pieces);
     left -= count;
     free -= sku.height;
   }

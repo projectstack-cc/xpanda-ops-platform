@@ -89,12 +89,21 @@
 // is the ≥ 44px target: it opens a picker under the diagram listing that row's on-edge stacks (one
 // ≥ 44px button each), and picking one is the same as tapping a flat stack. While an on-edge stack
 // (or Stand on edge) is armed, `edgeSlotVerdict` adds a "+ wall slot" lane under the rows.
+//
+// lbz-v2-03: on a ZONED trailer only (zoneLayout.isZonedTrailer), a zone band sits above the row
+// labels (each row goes to the zone with the most width in it; labels ellipsize, full name in
+// `title`), and an absolutely positioned SVG over the rows draws each zone's dotted outline from
+// zoneOutlineEdges. Cells go through one mapping that handles both layouts — percent-of-length in view
+// mode, rowPx in Customize — in display order (wall left, doors right), with non-scaling strokes. A
+// zone that owns no row (only gap-filled stacks in another zone's row) gets its own tag over its
+// stacks, so every zone appears (legacy drops that label). A non-zoned trailer renders as before.
 "use client";
 
 import { useState, type CSSProperties, type ReactNode } from "react";
 import type { Dimensions, PackColumn, PackRow, PackTrailer } from "@/lib/packEngine";
 import { thicknessColor, thicknessLabel } from "@/lib/thicknessPalette";
 import { useLang } from "@/components/lang";
+import { isZonedTrailer, zoneBand, zoneCellsOf, zoneOutlineEdges, type OutlineEdge } from "@/lib/zoneLayout";
 
 interface SelectedColumn {
   rowIndex: number;
@@ -211,6 +220,47 @@ function stackAccessibleName(column: PackColumn): string {
   return `Stack: ${parts.join(", ")}, ${total} inches.`;
 }
 
+/** lbz-v2-03: " Zone ZONE 2." on a zoned stack's accessible name; "" otherwise (unchanged). */
+function zoneSuffix(column: PackColumn): string {
+  const label = (column.zoneLabel ?? "").trim();
+  return label ? ` Zone ${label}.` : "";
+}
+
+function pctOf(v: number, total: number): string {
+  return `${total > 0 ? (v / total) * 100 : 0}%`;
+}
+
+/** lbz-v2-03: zone band segments, outline edges and markers in one display unit space — inches of
+ * length in view mode, px in Customize — with rows laid out in display order (wall first). y is in
+ * inches of width (the band's height maps to dims.width in both modes). */
+function buildZoneView(trailer: PackTrailer, displayOrder: number[], total: number, rowW: (rowIndex: number) => number) {
+  const spans = new Map<number, { x: number; w: number }>();
+  let x = 0;
+  for (const r of displayOrder) {
+    const w = rowW(r);
+    spans.set(r, { x, w });
+    x += w;
+  }
+  const rectOf = (ri: number, ci: number) => {
+    const sp = spans.get(ri);
+    const row = trailer.rows[ri];
+    const c = row?.columns[ci];
+    if (!sp || !c) return null;
+    return { x: sp.x, y: c.posY, w: row.rowLength > 0 ? sp.w * (c.colLength / row.rowLength) : sp.w, h: c.colWidth };
+  };
+  const outlines = zoneOutlineEdges(zoneCellsOf(trailer, rectOf));
+  const band = zoneBand(trailer);
+  const segments = band.segments.map((seg) => {
+    const xs = seg.rowIndices.map((ri) => spans.get(ri)).filter((v): v is { x: number; w: number } => !!v);
+    return { ...seg, x0: Math.min(...xs.map((v) => v.x)), x1: Math.max(...xs.map((v) => v.x + v.w)) };
+  });
+  const markers = band.markers.flatMap((m) => {
+    const rs = m.columns.map((c) => rectOf(c.rowIndex, c.columnIndex)).filter((v): v is { x: number; y: number; w: number; h: number } => !!v);
+    return rs.length ? [{ label: m.label, color: m.color, x: Math.min(...rs.map((r) => r.x)), y: Math.min(...rs.map((r) => r.y)) }] : [];
+  });
+  return { total, outlines, segments, markers };
+}
+
 const DIAGRAM_HEIGHT_PX = 240;
 // Below these fractions a column's on-screen box is too small to hold the 14px label legibly —
 // drop the label rather than shrinking the type (the accessible name still carries it).
@@ -271,6 +321,7 @@ export default function TrailerDiagram({
   const anySlot = editable && !!slotVerdict && (newRowVerdict !== null || displayOrder.some((r) => slotVerdict(r) !== null));
   const anyEdgeSlot = editable && !!edgeSlotVerdict && displayOrder.some((r) => edgeSlotVerdict(r) !== null);
   const pickRow = editable && edgePickRow !== null && trailer.rows[edgePickRow]?.columns.some((c) => c.onEdge) ? edgePickRow : null;
+  const zoneView = isZonedTrailer(trailer) ? buildZoneView(trailer, displayOrder, editable ? Math.max(editWidthPx, DIAGRAM_MIN_WIDTH_PX) : dims.length, (r) => (editable ? rowPx(r) : trailer.rows[r].rowLength)) : null;
 
   return (
     <div className="rounded-xl border border-[var(--card-border)] bg-surface p-4">
@@ -302,6 +353,23 @@ export default function TrailerDiagram({
         <span>DOORS</span>
       </div>
 
+      {/* lbz-v2-03: zone band (zoned trailers only). */}
+      {zoneView && (
+        <div className="relative w-full h-6 mb-1" role="list" aria-label="Offload zones, wall to doors">
+          {zoneView.segments.map((seg) => (
+            <div
+              key={`${seg.label}-${seg.x0}`}
+              role="listitem"
+              title={seg.label}
+              className={["absolute top-0 bottom-0 rounded-sm border border-[var(--surface)] overflow-hidden", seg.color ? "text-white" : "bg-[var(--surface-2)] text-text"].join(" ")}
+              style={{ left: pctOf(seg.x0, zoneView.total), width: pctOf(seg.x1 - seg.x0, zoneView.total), ...(seg.color ? { background: seg.color } : {}) }}
+            >
+              <span className="block truncate px-1 text-[11px] font-semibold leading-[22px] text-center">{seg.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Row labels, legacy print style: R1 at the doors (array index 0) up to Rn at the nose. */}
       <div className="flex w-full mb-0.5" aria-hidden="true">
         {displayOrder.map((rowIndex) => (
@@ -312,7 +380,7 @@ export default function TrailerDiagram({
       </div>
 
       <div
-        className="flex w-full rounded-md overflow-hidden border border-[var(--line)]"
+        className={zoneView ? "relative flex w-full rounded-md overflow-hidden border border-[var(--line)]" : "flex w-full rounded-md overflow-hidden border border-[var(--line)]"}
         style={{ height: bandHeightPx }}
       >
         {displayOrder.map((rowIndex, displayPos) => {
@@ -355,7 +423,7 @@ export default function TrailerDiagram({
                       type="button"
                       onClick={() => onSelectColumn(rowIndex, columnIndex)}
                       aria-pressed={isSelectedEdge}
-                      aria-label={`${stackAccessibleName(column)} Trailer ${trailerIndex + 1}, row R${rowIndex + 1}, position ${columnIndex + 1}.${verdictSuffix(edgeVerdict)}`}
+                      aria-label={`${stackAccessibleName(column)}${zoneSuffix(column)} Trailer ${trailerIndex + 1}, row R${rowIndex + 1}, position ${columnIndex + 1}.${verdictSuffix(edgeVerdict)}`}
                       title={edgeVerdict ? edgeVerdict.reason : column.rationale}
                       className={[
                         "absolute left-0 overflow-hidden box-border border-y border-[var(--line)] cursor-pointer hover:brightness-95",
@@ -395,7 +463,7 @@ export default function TrailerDiagram({
                     type="button"
                     onClick={() => onSelectColumn(rowIndex, columnIndex)}
                     aria-pressed={isSelected}
-                    aria-label={`${stackAccessibleName(column)} Trailer ${trailerIndex + 1}, row R${rowIndex + 1}, position ${columnIndex + 1}.${verdictSuffix(verdict)}`}
+                    aria-label={`${stackAccessibleName(column)}${zoneSuffix(column)} Trailer ${trailerIndex + 1}, row R${rowIndex + 1}, position ${columnIndex + 1}.${verdictSuffix(verdict)}`}
                     title={verdict ? verdict.reason : column.rationale}
                     className={[
                       "absolute left-0 flex flex-col overflow-hidden text-left box-border cursor-pointer",
@@ -503,6 +571,35 @@ export default function TrailerDiagram({
           );
         })}
         {editable && freePx > 0 && <div className="shrink-0" style={{ width: freePx }} aria-hidden="true" />}
+        {zoneView && (
+          <div className="absolute left-0 top-0 h-full pointer-events-none z-[7]" style={{ width: editable ? zoneView.total : "100%" }} aria-hidden="true">
+            <svg className="absolute inset-0 w-full h-full overflow-visible" viewBox={`0 0 ${zoneView.total} ${dims.width}`} preserveAspectRatio="none">
+              {zoneView.outlines.map((o) =>
+                o.edges.map((e: OutlineEdge, i: number) => (
+                  <line
+                    key={`${o.label}-${i}`}
+                    x1={e.x1}
+                    y1={e.y1}
+                    x2={e.x2}
+                    y2={e.y2}
+                    vectorEffect="non-scaling-stroke"
+                    style={{ stroke: o.color ?? "var(--muted)", strokeWidth: 2.5, strokeDasharray: "5 4", strokeLinecap: "butt" }}
+                  />
+                ))
+              )}
+            </svg>
+            {zoneView.markers.map((m) => (
+              <span
+                key={m.label}
+                title={m.label}
+                className={["absolute max-w-[160px] truncate rounded-sm px-1 text-[10px] leading-4 font-semibold border border-[var(--surface)]", m.color ? "text-white" : "bg-[var(--surface-2)] text-text"].join(" ")}
+                style={{ left: pctOf(m.x, zoneView.total), top: pctOf(m.y, dims.width), ...(m.color ? { background: m.color } : {}) }}
+              >
+                {m.label}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* lbr-07: "+" new-stack slots, one under each row that has width left, and "+ new row" under

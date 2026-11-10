@@ -65,6 +65,7 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import type { Dimensions, PackColumn, PackRow, PackTrailer, PackSku } from "./packEngine";
 import { thicknessColor } from "./thicknessPalette";
+import { isZonedTrailer, loadOrderWallToDoors, zoneBand, zoneCellsOf, zoneOutlineEdges, zoneSegments } from "./zoneLayout";
 
 // --- pure helpers (exported for loadingDiagramPdf.selfcheck.ts) ---
 
@@ -426,6 +427,18 @@ export async function buildLoadingDiagramPdf(
     page.drawText(summary, { x: MARGIN, y: cursorY - 12, size: 10, font: fontBold, color: WARN });
     cursorY -= 20;
   }
+
+  // lbz-v2-03: zoned trailers only — a zone legend, the load order, and room for the zone band over
+  // the row labels. A non-zoned trailer skips all of it, so its page is unchanged.
+  const zoned = isZonedTrailer(trailer);
+  if (zoned) {
+    drawZoneLegend(page, font, fontBold, trailer, cursorY - 12);
+    cursorY -= 16;
+    const order = loadOrderWallToDoors(trailer).map((z) => pdfSafe(z.label));
+    const line = fitText(font, `Load order (wall -> doors): ${order.join(" > ")}`, 10, PAGE_WIDTH - MARGIN * 2);
+    page.drawText(line, { x: MARGIN, y: cursorY - 12, size: 10, font, color: INK });
+    cursorY -= 18 + ZONE_BAND_SPACE;
+  }
   cursorY -= 6;
 
   // Diagram
@@ -433,6 +446,7 @@ export async function buildLoadingDiagramPdf(
   const diagramTop = cursorY;
   const box: DiagramBox = { x: MARGIN + 30, yTop: diagramTop, width: PAGE_WIDTH - MARGIN * 2 - 60, height: diagramHeight };
   drawDiagram(page, font, fontBold, trailer, dims, box);
+  if (zoned) drawZoneOverlay(page, fontBold, trailer, dims, box);
   cursorY = diagramTop - diagramHeight - 34 - DIAGRAM_CAPTION_H - TABLE_DROP;
 
   // Two-column tables: pieces (left) / stack breakdown (right). Each continues onto new pages on its
@@ -795,6 +809,74 @@ function drawTable(pageAt: (i: number) => PDFPage, fonts: Fonts, spec: TableSpec
       y = rowBottom;
     }
   });
+}
+
+// --- lbz-v2-03: zones on the printed diagram (zoned trailers only) ---
+
+/** Room reserved above the row labels for the zone band. */
+const ZONE_BAND_SPACE = 16;
+const ZONE_BAND_Y0 = 14; // band bottom, above box.yTop (the R labels sit at +4)
+const ZONE_BAND_H = 12;
+
+/** Standard Helvetica is WinAnsi-only: anything outside printable Latin-1 becomes "?" so a zone label
+ * typed with an unusual character can't make the PDF throw. */
+export function pdfSafe(text: string): string {
+  return text.replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"').replace(/[\u2013\u2014]/g, "-").replace(/[^\x20-\x7E\xA0-\xFF]/g, "?");
+}
+
+function zoneRgb(color: string | undefined): ReturnType<typeof rgb> {
+  return color ? parseHexColor(color) : MUTED;
+}
+
+/** "Zones:" then a swatch + label per zone in delivery order, clipped at the right margin. */
+function drawZoneLegend(page: PDFPage, font: PDFFont, fontBold: PDFFont, trailer: PackTrailer, y: number) {
+  const right = PAGE_WIDTH - MARGIN;
+  page.drawText("Zones:", { x: MARGIN, y, size: 10, font: fontBold, color: INK });
+  let x = MARGIN + fontBold.widthOfTextAtSize("Zones:", 10) + 8;
+  for (const z of zoneSegments(trailer)) {
+    if (x + 20 > right) break;
+    page.drawRectangle({ x, y: y - 1, width: 9, height: 9, color: zoneRgb(z.color), borderColor: LINE, borderWidth: 0.5 });
+    const text = fitText(font, `${pdfSafe(z.label)} (${z.pieces})`, 10, right - (x + 13));
+    page.drawText(text, { x: x + 13, y, size: 10, font, color: INK });
+    x += 13 + font.widthOfTextAtSize(text, 10) + 14;
+  }
+}
+
+/** The band over the rows (each row goes to the zone with the most width in it), a tag over the stacks
+ * of a zone that owns no row, and a dashed outline per zone traced around its own stacks. */
+function drawZoneOverlay(page: PDFPage, fontBold: PDFFont, trailer: PackTrailer, dims: Dimensions, box: DiagramBox) {
+  const rects = layoutColumnRects(trailer, dims, box);
+  const rectAt = new Map(rects.map((r) => [`${r.rowIndex}:${r.columnIndex}`, r]));
+  // Outlines, in PDF points (y up). Cells share exact edges, so edge cancellation works as on screen.
+  const cells = zoneCellsOf(trailer, (ri, ci) => {
+    const r = rectAt.get(`${ri}:${ci}`);
+    return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
+  });
+  for (const outline of zoneOutlineEdges(cells)) {
+    const color = zoneRgb(outline.color);
+    for (const e of outline.edges) page.drawLine({ start: { x: e.x1, y: e.y1 }, end: { x: e.x2, y: e.y2 }, thickness: 1.6, color, dashArray: [3, 2] });
+  }
+  const band = zoneBand(trailer);
+  const bandY = box.yTop + ZONE_BAND_Y0;
+  for (const seg of band.segments) {
+    const spans = seg.rowIndices.map((ri) => rowSpanX(trailer, dims, box, trailer.rows[ri]));
+    const x0 = Math.min(...spans.map((sp) => sp.x));
+    const x1 = Math.max(...spans.map((sp) => sp.x + sp.width));
+    page.drawRectangle({ x: x0, y: bandY, width: x1 - x0, height: ZONE_BAND_H, color: zoneRgb(seg.color), borderColor: rgb(1, 1, 1), borderWidth: 0.5 });
+    const label = fitText(fontBold, pdfSafe(seg.label), 8, Math.max(4, x1 - x0 - 4));
+    const w = fontBold.widthOfTextAtSize(label, 8);
+    if (x1 - x0 >= 8) page.drawText(label, { x: x0 + (x1 - x0) / 2 - w / 2, y: bandY + 3, size: 8, font: fontBold, color: rgb(1, 1, 1) });
+  }
+  for (const m of band.markers) {
+    const rs = m.columns.map((c) => rectAt.get(`${c.rowIndex}:${c.columnIndex}`)).filter((r): r is LayoutRect => !!r);
+    if (!rs.length) continue;
+    const x0 = Math.min(...rs.map((r) => r.x));
+    const yTop = Math.max(...rs.map((r) => r.y + r.height));
+    const label = fitText(fontBold, pdfSafe(m.label), 7, 80);
+    const w = fontBold.widthOfTextAtSize(label, 7) + 6;
+    page.drawRectangle({ x: x0 + 1, y: yTop - 11, width: w, height: 10, color: zoneRgb(m.color), borderColor: rgb(1, 1, 1), borderWidth: 0.5 });
+    page.drawText(label, { x: x0 + 4, y: yTop - 8.5, size: 7, font: fontBold, color: rgb(1, 1, 1) });
+  }
 }
 
 function parseHexColor(hex: string): ReturnType<typeof rgb> {

@@ -15,6 +15,9 @@
 // auto-fill rule live in LoadPlanView / lib/bolNumberFill.ts; the trailer's own number goes to its
 // loading-diagram print (legacy printed the per-trailer number) and seeds the BOL modal.
 // Presentational: everything here is derived from props; nothing is fetched.
+// lbz-v2-03: on a zoned trailer the card reads "Truck N of M", and its subtitle gains a zone legend
+// (swatch, label, pieces), `Load order (wall → doors): …`, and zoneOrderWarning's non-blocking note
+// when stacks sit out of delivery order. Non-zoned cards are unchanged.
 import { useMemo, type ReactNode } from "react";
 import { FileText, FolderOpen, Pencil, RotateCcw, Save } from "lucide-react";
 import MetricTile from "@/components/dashboard/MetricTile";
@@ -25,6 +28,7 @@ import LoadingDiagramPrintButton from "@/components/logistics/LoadingDiagramPrin
 import PrintAllDiagramsButton from "@/components/logistics/PrintAllDiagramsButton";
 import type { CartLine, Dimensions, PackOptions, PackPlan, PackSku, PackTrailer } from "@/lib/packEngine";
 import { thicknessColor, thicknessLabel } from "@/lib/thicknessPalette";
+import { isZonedTrailer, loadOrderWallToDoors, zoneOrderWarning, zoneSegments } from "@/lib/zoneLayout";
 import CustomizeEditor from "./CustomizeEditor";
 import { BTN_GHOST, BTN_OUTLINE, BTN_PRIMARY, CARD, NO_BOL_REASON, NO_SAVE_REASON, plural, trailerBadge } from "./loadBuilderUi";
 
@@ -86,6 +90,34 @@ function trailerSubtitle(t: PackTrailer, runnerHeight: number): string {
   const left = Math.max(0, r0(t.dims.length - t.usedLength));
   const mixed = t.rows.reduce((s, row) => s + row.columns.filter((c) => c.layers.length > 1).length, 0);
   return `${pct}% length · ${plural(mixed, "mixed stack", "mixed stacks")} · ${left}″ left · ${runnerHeight > 0 ? `${runnerHeight}″ runners` : "no runners"}`;
+}
+
+/** lbz-v2-03: a zoned trailer's legend, load order and out-of-order note (under the stats line). */
+function ZoneSummary({ trailer }: { trailer: PackTrailer }) {
+  const segs = zoneSegments(trailer);
+  const order = loadOrderWallToDoors(trailer);
+  const warning = zoneOrderWarning(trailer);
+  return (
+    <div className="mt-1.5 space-y-1 font-sans">
+      <ul className="flex flex-wrap gap-x-3 gap-y-1" aria-label="Zones on this truck">
+        {segs.map((z) => (
+          <li key={z.label} className="inline-flex items-center gap-1.5 text-text">
+            <span aria-hidden="true" className="inline-block w-3 h-3 rounded-sm border border-[var(--border)] bg-[var(--surface-2)]" style={z.color ? { background: z.color } : undefined} />
+            <span className="font-semibold">{z.label}</span>
+            <span className="font-mono tabular-nums text-muted">{plural(z.pieces, "pc", "pcs")}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="text-text">
+        <span className="font-semibold">Load order (wall → doors):</span> {order.map((z) => z.label).join(" → ")}
+      </p>
+      {warning && (
+        <p role="status" className="rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)] px-2 py-1">
+          {warning}
+        </p>
+      )}
+    </div>
+  );
 }
 
 interface PiecesRow {
@@ -313,8 +345,17 @@ export default function ResultsTab(p: ResultsTabProps) {
                   trailer={trailer}
                   dims={trailer.dims}
                   trailerIndex={trailerIndex}
-                  title={`Trailer ${trailerIndex + 1} · ${trailer.type ?? p.trailerTypeKey} · ${dimsLabel(trailer.dims)}`}
-                  subtitle={trailerSubtitle(trailer, p.runnerHeight)}
+                  title={`${isZonedTrailer(trailer) ? `Truck ${trailerIndex + 1} of ${trucks}` : `Trailer ${trailerIndex + 1}`} · ${trailer.type ?? p.trailerTypeKey} · ${dimsLabel(trailer.dims)}`}
+                  subtitle={
+                    isZonedTrailer(trailer) ? (
+                      <>
+                        {trailerSubtitle(trailer, p.runnerHeight)}
+                        <ZoneSummary trailer={trailer} />
+                      </>
+                    ) : (
+                      trailerSubtitle(trailer, p.runnerHeight)
+                    )
+                  }
                   typeBadge={trailerBadge(trailer, p.trailerTypeKey)}
                   selectedColumn={p.selected && p.selected.trailerIndex === trailerIndex ? { rowIndex: p.selected.rowIndex, columnIndex: p.selected.columnIndex } : null}
                   onSelectColumn={(rowIndex, columnIndex) => p.onSelect({ trailerIndex, rowIndex, columnIndex })}

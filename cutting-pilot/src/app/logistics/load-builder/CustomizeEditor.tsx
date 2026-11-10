@@ -99,6 +99,7 @@ import {
   type WholeStackSource,
 } from "@/lib/loadEditor";
 import { fetchLoadBuilderSkus } from "@/lib/jobPull";
+import { isZonedTrailer, zoneOrderWarning } from "@/lib/zoneLayout";
 import TrailerDiagram, { type TapVerdict } from "@/components/logistics/TrailerDiagram";
 import TrailerScrollBox from "@/components/logistics/TrailerScrollBox";
 import { trailerBadge } from "./loadBuilderUi";
@@ -152,6 +153,9 @@ type Target =
   | { kind: "holding" };
 
 const HOWTO_KEY = "lb_customize_howto_v1";
+// lbz-v2-03: Dissolve repacks a trailer without zones, so it's off on zoned trailers (as in legacy).
+const ZONED_DISSOLVE_REASON = "Off on zoned orders";
+
 // lb-trailer-01: the empty-trailer card's one muted line, and the reason its Print / Dissolve are off.
 const EMPTY_TRAILER_NOTE = "Empty — this trailer is removed when you Apply.";
 
@@ -214,6 +218,15 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
   }, [toast]);
 
   const guards = useMemo(() => evaluateGuards(state), [state]);
+  // lbz-v2-03: per-trailer zone-order notes (zoned trailers only; empty otherwise).
+  const zoneWarnings = useMemo(
+    () =>
+      state.plan.trailers.flatMap((trailer, t) => {
+        const text = zoneOrderWarning(trailer);
+        return text ? [{ t, text }] : [];
+      }),
+    [state.plan]
+  );
   const overflowRowKeys = useMemo(() => new Set(guards.overflowingRows.map((o) => `${o.trailerIndex}:${o.rowIndex}`)), [guards]);
 
   const holdingSummary: HoldingSummaryLine[] = useMemo(
@@ -624,6 +637,20 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
 
       <EditorGuards guards={guards} holdingSummary={holdingSummary} />
 
+      {/* lbz-v2-03: zone order — warns, never blocks a move or Apply. */}
+      {zoneWarnings.length > 0 && (
+        <div role="status" className="rounded-xl border border-[var(--warn-border)] bg-[var(--warn-bg)] px-4 py-2 text-sm text-[var(--warn-text)]">
+          <p className="font-semibold">Zones out of delivery order — you can still apply.</p>
+          <ul className="mt-0.5 space-y-0.5">
+            {zoneWarnings.map((w) => (
+              <li key={w.t}>
+                Trailer {w.t + 1}: {w.text}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-4 items-start">
         {state.plan.trailers.length === 0 ? (
           <div className="rounded-xl border border-[var(--card-border)] bg-surface p-6 text-sm text-muted">Nothing placed on any trailer.</div>
@@ -659,8 +686,8 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
                     <button
                       type="button"
                       onClick={() => setDissolveTi(t)}
-                      disabled={empty}
-                      title={empty ? EMPTY_TRAILER_NOTE : undefined}
+                      disabled={empty || isZonedTrailer(trailer)}
+                      title={empty ? EMPTY_TRAILER_NOTE : isZonedTrailer(trailer) ? ZONED_DISSOLVE_REASON : undefined}
                       className="min-h-[44px] px-3 rounded-md text-[13px] font-medium border border-[var(--border)] text-text flex items-center gap-1.5 cursor-pointer transition-colors hover:bg-[var(--ghost-bg)] disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
                     >
                       <Shuffle className="w-3.5 h-3.5" aria-hidden="true" />

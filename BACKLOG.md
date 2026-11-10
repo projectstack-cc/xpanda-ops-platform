@@ -95,7 +95,7 @@
     - **Blocked by the lbz-v2 port (Steve, 2026-11-09).** Zoned orders must not lose sequencing at cutover.
     - [x] lbz-v2-01 zonedPack wrapper
     - [x] lbz-v2-02 job pull, planner, per-zone load list, save/restore
-    - [ ] lbz-v2-03 diagram, PDF, Customize
+    - [x] lbz-v2-03 diagram, PDF, Customize (the sliver-label fix is v2-only; the legacy bug item stays open)
     - [ ] lbz-v2-04 Generate BOL zone data
     - [ ] lbz-v2-05 BOL zone-column editing
   - [ ] lb-diag-01 follow-up — decide the `EditorGuards.tsx` overflow wording ("…past the rear of the trailer there").

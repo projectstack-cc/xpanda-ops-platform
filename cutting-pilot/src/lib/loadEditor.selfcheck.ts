@@ -9,6 +9,9 @@
 import type { CartLine, PackColumn, PackOptions, PackPlan, PackRow, PackSku, PackTrailer, Dimensions } from "./packEngine";
 import { DEFAULT_PACK_OPTIONS, pack, TRAILER_TYPES, HOLEY_BOARD_CATEGORY, validatePlan } from "./packEngine";
 import { proposeDissolve, applyDissolve } from "./dissolve";
+import * as Z from "./loadEditor";
+import { zonedPack, UNZONED_LABEL } from "./zonedPack";
+import { FOUR_ZONE, FOUR_ZONE_SKUS, fourZoneCart } from "./zonedPack.selfcheck";
 import {
   createEditorState,
   moveColumn,
@@ -1477,6 +1480,117 @@ export function runLoadEditorSelfCheck(): { pass: boolean; results: CheckResult[
     check("drop: rows with zero columns count as empty", isEmptyTrailer(zeroCols.plan.trailers[1]) && isEmptyTrailer(zeroCols.plan.trailers[3]) && !isEmptyTrailer(zeroCols.plan.trailers[0]));
     const droppedZero = dropEmptyTrailers(zeroCols.plan);
     check("drop: zero-column and no-row trailers removed, ascending", droppedZero.plan.trailers.length === 2 && JSON.stringify(droppedZero.removed) === "[1,3]", JSON.stringify(droppedZero.removed));
+  }
+
+  // lbz-v2-03: Customize keeps zones. Every path that builds a column inherits its source's zone;
+  // a column from nothing is Unzoned (no color) on a zoned load; two zones never share a stack.
+  {
+    const T53Z = TRAILER_TYPES["53ft Standard"];
+    const zplan = zonedPack(FOUR_ZONE, FOUR_ZONE_SKUS, T53Z, OPTS);
+    const zs = Z.createEditorState(zplan, T53Z, OPTS, FOUR_ZONE, FOUR_ZONE_SKUS);
+    const allCols = (st: EditorState) => [...st.plan.trailers.flatMap((t) => t.rows.flatMap((r) => r.columns)), ...st.holding];
+    // Pieces per (zone, seq, color, SKU) across plan + holding — splits and moves leave it unchanged.
+    const sig = (st: EditorState) => {
+      const m = new Map<string, number>();
+      for (const c of allCols(st)) for (const l of c.layers) {
+        const k = `${c.zoneLabel}|${c.offloadSeq}|${c.zoneColor}|${l.skuId}`;
+        m.set(k, (m.get(k) ?? 0) + l.count);
+      }
+      return Array.from(m.entries()).sort().join(";");
+    };
+    const refsOf = (st: EditorState, label: string) => {
+      const out: { t: number; r: number; c: number }[] = [];
+      st.plan.trailers.forEach((t, ti) => t.rows.forEach((r, ri) => r.columns.forEach((c, ci) => { if (c.zoneLabel === label && !c.onEdge) out.push({ t: ti, r: ri, c: ci }); })));
+      return out;
+    };
+    const colAt = (st: EditorState, ref: { t: number; r: number; c: number }) => st.plan.trailers[ref.t].rows[ref.r].columns[ref.c];
+
+    check("zones: validateForApply on the zoned plan has no conservation violation (cart merged by SKU)", Z.validateForApply(zs).filter((v) => v.rule === "conservation").length === 0, JSON.stringify(Z.validateForApply(zs).slice(0, 2)));
+
+    const z1 = refsOf(zs, "ZONE 1");
+    const z2 = refsOf(zs, "ZONE 2");
+    const cross = Z.evaluateStackTarget(zs, { kind: "top", ref: z2[0], count: 1 }, z1[0]);
+    check("zones: a ZONE 2 piece onto a ZONE 1 stack is refused with the reason", cross.level === "no" && cross.reason === Z.ZONE_STACK_REASON && Z.ZONE_STACK_REASON === "Different zones can't share a stack", JSON.stringify(cross));
+    check("zones: stackOnto enforces it (same state back)", Z.stackOnto(zs, { kind: "top", ref: z2[0], count: 1 }, z1[0]) === zs);
+    // Same zone: find a pair whose combined height fits, so the only possible "no" would be the zone rule.
+    let same: { level: string; reason: string } | null = null;
+    for (const a of z1) for (const b of z1) {
+      if (same || (a.r === b.r && a.c === b.c)) continue;
+      const src = colAt(zs, a);
+      const dst = colAt(zs, b);
+      const unit = src.layers[src.layers.length - 1].unitHeight;
+      if (dst.totalHeight + unit <= 109 - 1e-6) same = Z.evaluateStackTarget(zs, { kind: "top", ref: a, count: 1 }, b);
+    }
+    check("zones: one zone onto its own stack is not refused for zone", !!same && same.level !== "no" && same.reason !== Z.ZONE_STACK_REASON, JSON.stringify(same));
+
+    const held = Z.takeToHolding(zs, { kind: "top", ref: z2[0], count: 1 });
+    const h = held.holding[held.holding.length - 1];
+    check("zones: a top split into holding keeps its zone and color", !!h && h.zoneLabel === "ZONE 2" && h.offloadSeq === 2 && h.zoneColor === colAt(zs, z2[0]).zoneColor);
+    const pieces = Z.piecesFor(zs, { kind: "top", ref: z1[0], count: 2 });
+    check("zones: piecesFor (top) carries the source's zone", pieces?.zoneLabel === "ZONE 1" && pieces?.offloadSeq === 1);
+    check("zones: moving a split stack keeps every zone (plan + holding)", sig(held) === sig(zs));
+
+    const added = Z.addRow(zs, 0, "HB_5", 3);
+    const newCol = added.plan.trailers[0].rows[added.plan.trailers[0].rows.length - 1].columns[0];
+    check("zones: addRow on a zoned load is Unzoned, no color", newCol.zoneLabel === UNZONED_LABEL && newCol.offloadSeq === null && newCol.zoneColor === undefined);
+    const addedCol = Z.addColumn(zs, 0, 0, "HB_5", 2);
+    check("zones: addColumn on a zoned load is Unzoned", addedCol.plan.trailers[0].rows[0].columns.some((c) => c.zoneLabel === UNZONED_LABEL && c.zoneColor === undefined));
+    const toHold = Z.addToHolding(zs, FOUR_ZONE_SKUS[4], 3);
+    check("zones: addToHolding on a zoned load is Unzoned", toHold.holding.length > 0 && toHold.holding.every((c) => c.zoneLabel === UNZONED_LABEL && c.zoneColor === undefined));
+    const libSku = { id: "LIB_X", name: "lib", sku: "LIB_X", length: 48, width: 24, height: 5, weight: 1, category: "Holey Board", allowRotation: false };
+    const lib = Z.addRowFromLibrary(zs, 0, libSku, 4);
+    const libCol = lib.plan.trailers[0].rows[lib.plan.trailers[0].rows.length - 1].columns[0];
+    check("zones: a library row is Unzoned", libCol.zoneLabel === UNZONED_LABEL && libCol.zoneColor === undefined);
+    const libLine = lib.cart.filter((c) => c.skuId === "LIB_X");
+    check("zones: growCartForSku grows an unzoned line, zoned lines untouched", libLine.length === 1 && libLine[0].qty === 4 && !libLine[0].zoneLabel && JSON.stringify(lib.cart.filter((c) => c.skuId !== "LIB_X")) === JSON.stringify(zs.cart));
+    const lib2 = Z.addRowFromLibrary(lib, 0, libSku, 2);
+    check("zones: a second library add grows the same unzoned line", lib2.cart.filter((c) => c.skuId === "LIB_X").length === 1 && lib2.cart.find((c) => c.skuId === "LIB_X")?.qty === 6);
+    const zcart: CartLine[] = [{ skuId: "HB_6", qty: 5, offloadSeq: 1, zoneLabel: "ZONE 1" }];
+    const zstate = Z.createEditorState(zonedPack(zcart, FOUR_ZONE_SKUS, T53Z, OPTS), T53Z, OPTS, zcart, FOUR_ZONE_SKUS);
+    const grown = Z.addRowFromLibrary({ ...zstate, originalSkuIds: new Set<string>() }, 0, FOUR_ZONE_SKUS[5], 2);
+    check("zones: growCartForSku on a SKU that has a zoned line adds an unzoned line instead", grown.cart.length === 2 && grown.cart[0].qty === 5 && grown.cart[0].zoneLabel === "ZONE 1" && grown.cart[1].zoneLabel === undefined && grown.cart[1].qty === 2, JSON.stringify(grown.cart));
+
+    check("zones: addLayer onto a zone's stack is refused", Z.addLayer(zs, z1[0], "HB_1", 1) === zs);
+    const unzRef = { t: 0, r: added.plan.trailers[0].rows.length - 1, c: 0 };
+    check("zones: addLayer onto an Unzoned stack works", Z.addLayer(added, unzRef, "HB_5", 1) !== added);
+    const unzOnto = Z.evaluateStackTarget(added, { kind: "column", ref: unzRef }, z1[0]);
+    check("zones: an Unzoned stack onto a zone's stack is refused", unzOnto.level === "no" && unzOnto.reason === Z.ZONE_STACK_REASON, JSON.stringify(unzOnto));
+
+    // compactLoad / shiftToRear / withAutoShift keep column zones.
+    const holed = Z.takeToHolding(zs, { kind: "column", ref: { t: 0, r: 2, c: 0 } });
+    const holed2 = Z.takeToHolding(holed, { kind: "column", ref: { t: 0, r: 2, c: 0 } });
+    const compacted = Z.compactLoad(holed2);
+    const shifted = Z.shiftToRear(holed2);
+    const auto = Z.withAutoShift(zs, holed2);
+    check("zones: compactLoad keeps zones", sig(compacted) === sig(holed2));
+    check("zones: shiftToRear keeps zones", sig(shifted) === sig(holed2));
+    check("zones: withAutoShift keeps zones", sig(auto) === sig(holed2));
+    check("zones: every column still zoned after the shifts", [compacted, shifted, auto].every((st) => allCols(st).every((c) => !!c.zoneLabel)));
+
+    // layFlat / standOnEdge on the box truck (on-edge stacks inherit the source zone).
+    const BOX = TRAILER_TYPES["26ft Box Truck"];
+    const bcart = fourZoneCart((q) => Math.ceil(q / 4));
+    const bs = Z.createEditorState(zonedPack(bcart, FOUR_ZONE_SKUS, BOX, OPTS), BOX, OPTS, bcart, FOUR_ZONE_SKUS);
+    let edgeRef: { t: number; r: number; c: number } | null = null;
+    bs.plan.trailers.forEach((t, ti) => t.rows.forEach((r, ri) => r.columns.forEach((c, ci) => { if (!edgeRef && c.onEdge) edgeRef = { t: ti, r: ri, c: ci }; })));
+    check("zones: box-truck fixture has an on-edge stack", edgeRef !== null);
+    if (edgeRef) {
+      const er = edgeRef as { t: number; r: number; c: number };
+      const flat = Z.layFlat(bs, { kind: "column", ref: er });
+      const lf = flat.holding[flat.holding.length - 1];
+      check("zones: layFlat keeps the on-edge stack's zone", !!lf && !lf.onEdge && lf.zoneLabel === colAt(bs, er).zoneLabel && lf.zoneColor === colAt(bs, er).zoneColor);
+      // Stand it back on edge into any row with room.
+      const src = { kind: "holding" as const, index: flat.holding.length - 1 };
+      let stood: EditorState | null = null;
+      flat.plan.trailers.forEach((t, ti) => t.rows.forEach((_, ri) => { if (!stood && Z.evaluateStandTarget(flat, src, { t: ti, r: ri }).level !== "no") stood = Z.standOnEdge(flat, src, { t: ti, r: ri }); }));
+      const before = new Set(allCols(flat).filter((c) => c.onEdge));
+      const fresh = stood ? allCols(stood as EditorState).filter((c) => c.onEdge && !Array.from(before).some((b) => b.rationale === c.rationale && b.posY === c.posY && b.stackCount === c.stackCount && b.zoneLabel === c.zoneLabel)) : [];
+      check("zones: standOnEdge's new on-edge stacks inherit the zone", !!stood && allCols(stood as EditorState).filter((c) => c.onEdge).every((c) => !!c.zoneLabel) && fresh.every((c) => c.zoneLabel === lf.zoneLabel), `${stood ? "stood" : "no row had room"}; fresh ${fresh.length}`);
+    }
+
+    // Non-zoned loads are unchanged: nothing stamped.
+    const plainAdded = Z.addRow(makeFixture(), 0, "A", 1);
+    check("zones: addRow on a non-zoned load stamps nothing", allCols(plainAdded).every((c) => !("zoneLabel" in c) && !("offloadSeq" in c)));
   }
 
   return { pass: results.every((r) => r.pass), results };
