@@ -10395,6 +10395,14 @@ current series).
 
 ## Safety
 
+- **sds-01 — public SDS library split out to the standalone xpanda-sds Pages project (repo
+  projectstack-cc/xpanda-sds); root = SDS search for the posted QR codes; old fork's QC/training/home removed
+  and redirected. No platform code changed.** Deploy `69e9924d-f908-4349-87f3-b8cd1f653145` (previous production
+  `faa5860b-4043-4791-8bcc-fd51ccade552`, for rollback). Live check: 40/40 PDFs 200 `application/pdf`; `/safety/*`,
+  `/safety/pdfs/*`, `/training/*`, `/qc/*` 301 to their current homes. In the new repo only: Diamond Crystal PDF
+  filename fixed (trailing space), Browse filter box wired (it was never connected), notif bell / manifest /
+  training card removed. Repo owner is projectstack-cc (the prompt's `Zer0Flaw` account does not exist).
+
 - **P441 — Safety module migrated off its private i18n IIFE onto the shared `window.I18n` engine
   (P440, same batch).** `safety/i18n.js` keeps its outer IIFE, `translations` table, and
   `applyTrainingPoster`/`TRAINING_POSTER_URL` exactly, but the private language-state machinery
