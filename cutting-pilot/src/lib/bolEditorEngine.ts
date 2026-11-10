@@ -33,6 +33,13 @@ import {
   pickCommodityColumnsTier,
   resolveCommodityColumns,
   formatBolDate,
+  COORDS,
+  buildZoneColumns,
+  pickZoneColumnTier,
+  hashJobZoneData,
+  type ZoneColumn,
+  type ZoneSegment,
+  type JobZoneLineItem,
   type BolFieldMapEntry,
   type BolOverrides,
   type BolRecord,
@@ -450,7 +457,31 @@ export async function mountBolEditor(
   let lastBoxes: Record<string, BolLayoutFieldBox> = {}; // fieldKey -> box, from the most recent layoutBol call
   let lastRuns: BolLayoutRun[] = []; // runs from the most recent layoutBol call, for exact-preview's failure fallback
 
+  // ── lbz-v2-05: zone columns (port of logistics/bol-editor.js's lbz-bol-01 section). A zoned BOL
+  // carries render_overrides.zoneColumns { items?, zoneData, sourceHash }; its N zone boxes REPLACE
+  // the commodity / commodity2 boxes entirely. Each box is keyed `zoneCol0`, `zoneCol1`, … and lives
+  // in inputEls / handleEls like any field, so the style toolbar, overflow outline and _style
+  // (box + per-line) work unchanged. Moving a box changes its item's x/y — the renderer places zone
+  // columns from item.x/y and never reads _pos / _size for them (bolShared.layoutBol), so that's the
+  // only move that prints where it was dropped (legacy does the same). No resize handle, for the same
+  // reason. Default items come from buildZoneColumns(zoneData, fonts.regular) — the same call the
+  // renderer makes when no items are saved — so an untouched BOL edits exactly as it prints. ──
+  const ZC_COL_W = (COORDS.zoneColumns.maxW as number) / (COORDS.zoneColumns.cols as number);
+  let zcZoneData: ZoneSegment[] | null = null; // frozen snapshot the columns were built from (Reset)
+  let zcSourceHash: string | null = null; // the job's zone-assignment hash at generation (stale guard)
+  let zcItems: ZoneColumn[] = [];
+  {
+    const zc0 = bol._overrides && (bol._overrides as BolOverrides).zoneColumns;
+    if (zc0 && Array.isArray(zc0.zoneData) && zc0.zoneData.length) {
+      zcZoneData = zc0.zoneData;
+      zcSourceHash = zc0.sourceHash || null;
+      zcItems = Array.isArray(zc0.items) && zc0.items.length ? zc0.items.map((it) => ({ ...it })) : buildZoneColumns(zcZoneData, fonts.regular).items;
+    }
+  }
+  const isZoneColKey = (k: string) => /^zoneCol\d+$/.test(k);
+
   function fieldSupportsLines(fieldKey: string): boolean {
+    if (isZoneColKey(fieldKey)) return true;
     const field = FIELD_MAP.find((f) => f.overrideKey === fieldKey);
     return !!field && (field.type === "multiline" || field.type === "shipto");
   }
@@ -462,6 +493,12 @@ export async function mountBolEditor(
   // REAL tier/coord default (dynamically recomputed for commodity, unlike the old static
   // COORDS-only approximation this replaces).
   function baseCoordForField(fieldKey: string): BolCoord {
+    // lbz-v2-05: a zone column's base is its own tier (or 10/12 under a box-level size), as layoutBol.
+    if (isZoneColKey(fieldKey)) {
+      if (styleOverrides[fieldKey]?.size != null) return { x: 0, y: 0, size: 10, lineH: 12 };
+      const tier = pickZoneColumnTier(currentTextValue(fieldKey).split("\n"), fonts.regular, ZC_COL_W);
+      return { x: 0, y: 0, size: tier.size, lineH: tier.lineH };
+    }
     const field = FIELD_MAP.find((f) => f.overrideKey === fieldKey);
     if (!field) return { x: 0, y: 0, size: 10, lineH: 12 };
     if (field.type === "shipto") return (field.coords as BolCoord[])[0];
@@ -577,8 +614,9 @@ export async function mountBolEditor(
     "font-family:Helvetica,Arial,sans-serif;color:transparent;caret-color:var(--text,#111827);resize:none;overflow:hidden;";
 
   for (const field of FIELD_MAP) {
-    if (field.type === "zonecolumns") continue; // no zone-column editing UI in v2 (BACKLOG.md)
+    if (field.type === "zonecolumns") continue; // lbz-v2-05: N boxes, built by buildZcBoxes() below
     const k = field.overrideKey;
+    if ((k === "commodity" || k === "commodity2") && zcZoneData) continue; // zone columns replace commodity on a zoned BOL
     const initVal = deriveValue(bol, field);
     initialValues[k] = initVal;
 
@@ -661,6 +699,115 @@ export async function mountBolEditor(
       canvasWrap.appendChild(rh);
     }
   }
+
+  // lbz-v2-05: (re)builds the zone-column boxes from zcItems — on open and after Reset columns.
+  function wireTextField(el: HTMLTextAreaElement, k: string) {
+    prevLines[k] = el.value.split("\n");
+    el.addEventListener("focus", () => {
+      activeFieldKey = k;
+      notifyActiveField();
+    });
+    el.addEventListener("blur", () => {
+      setTimeout(() => {
+        if (activeFieldKey === k && document.activeElement !== inputEls[k]) {
+          activeFieldKey = null;
+          notifyActiveField();
+        }
+      }, 0);
+    });
+    el.addEventListener("click", () => {
+      if (activeFieldKey === k) notifyActiveField();
+    });
+    el.addEventListener("keyup", () => {
+      if (activeFieldKey === k) notifyActiveField();
+    });
+  }
+  function buildZcBoxes() {
+    for (const k of Object.keys(inputEls)) {
+      if (!isZoneColKey(k)) continue;
+      inputEls[k].remove();
+      handleEls[k]?.remove();
+      delete inputEls[k];
+      delete handleEls[k];
+      delete prevLines[k];
+    }
+    zcItems.forEach((item, idx) => {
+      const k = "zoneCol" + idx;
+      const el = document.createElement("textarea");
+      el.value = item.text;
+      el.style.cssText = EDIT_SURFACE_CSS;
+      el.setAttribute("aria-label", `Zone column ${item.label || idx + 1}`);
+      wireTextField(el, k);
+      el.addEventListener("input", () => {
+        zcItems[idx].text = el.value;
+        const newLines = el.value.split("\n");
+        styleOverrides[k] = shiftLineKeys(styleOverrides[k], prevLines[k], newLines);
+        prevLines[k] = newLines;
+        if (activeFieldKey === k) notifyActiveField();
+        scheduleRelayout();
+      });
+      inputEls[k] = el;
+      canvasWrap.appendChild(el);
+
+      const handle = document.createElement("div");
+      handle.title = "Drag to move · double-click to put back";
+      handle.style.cssText =
+        "position:absolute;width:16px;height:16px;border-radius:4px;background:var(--brand,#1e293b);color:#fff;font-size:11px;line-height:16px;text-align:center;cursor:grab;z-index:5;box-shadow:0 1px 2px rgba(0,0,0,0.3);touch-action:none;user-select:none;";
+      handle.textContent = "✥";
+      attachZcDragHandle(handle, idx);
+      handleEls[k] = handle;
+      canvasWrap.appendChild(handle);
+    });
+  }
+  // Same pointer-capture pattern as attachDragHandle, but moves the item's own x/y (PDF points).
+  function attachZcDragHandle(handle: HTMLDivElement, idx: number) {
+    let startX = 0,
+      startY = 0,
+      baseX = 0,
+      baseY = 0,
+      dragging = false;
+    handle.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragging = true;
+      handle.setPointerCapture(e.pointerId);
+      handle.style.cursor = "grabbing";
+      startX = e.clientX;
+      startY = e.clientY;
+      baseX = zcItems[idx].x;
+      baseY = zcItems[idx].y;
+    });
+    handle.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      const s = scale || 1;
+      zcItems[idx].x = Math.round((baseX + (e.clientX - startX) / s) * 2) / 2;
+      zcItems[idx].y = Math.round((baseY - (e.clientY - startY) / s) * 2) / 2;
+      scheduleRelayout();
+    });
+    const endDrag = (e: PointerEvent) => {
+      if (!dragging) return;
+      dragging = false;
+      try {
+        handle.releasePointerCapture(e.pointerId);
+      } catch {
+        // already released
+      }
+      handle.style.cursor = "grab";
+    };
+    handle.addEventListener("pointerup", endDrag);
+    handle.addEventListener("pointercancel", endDrag);
+    handle.addEventListener("dblclick", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const def = zcZoneData ? buildZoneColumns(zcZoneData, fonts.regular).items[idx] : undefined;
+      if (def) {
+        zcItems[idx].x = def.x;
+        zcItems[idx].y = def.y;
+        scheduleRelayout();
+      }
+    });
+  }
+  if (zcZoneData) buildZcBoxes();
 
   let renderTask: any = null;
   let scale = 1;
@@ -868,6 +1015,17 @@ export async function mountBolEditor(
     const sizeOut: Record<string, { w: number }> = {};
     for (const sk in sizeOverrides) sizeOut[sk] = { w: Math.round(sizeOverrides[sk].w * 2) / 2 };
     if (Object.keys(sizeOut).length > 0) overrides._size = sizeOut;
+
+    // lbz-v2-05: persist the WHOLE zoneColumns container (items + zoneData + sourceHash). Apply
+    // replaces render_overrides wholesale, so dropping zoneData / sourceHash would break Reset
+    // columns and the stale guard on every later edit.
+    if (zcZoneData) {
+      overrides.zoneColumns = {
+        items: zcItems.map((it) => ({ ...it })),
+        zoneData: zcZoneData,
+        ...(zcSourceHash ? { sourceHash: zcSourceHash } : {}),
+      };
+    }
 
     return overrides;
   }
@@ -1090,7 +1248,91 @@ export async function mountBolEditor(
 
       if (field.type !== "scrap") updateFieldOverflow(k);
     }
+    // lbz-v2-05: the zone-column boxes, from layoutBol's `zoneColN` boxes (the renderer's own).
+    for (const k of Object.keys(inputEls)) {
+      if (!isZoneColKey(k)) continue;
+      const el = inputEls[k] as HTMLTextAreaElement;
+      const box = boxes[k];
+      const handle = handleEls[k];
+      if (!box) {
+        el.style.display = "none";
+        if (handle) handle.style.display = "none";
+        continue;
+      }
+      el.style.display = "";
+      if (handle) handle.style.display = "";
+      el.style.left = Math.round(box.x * s) + "px";
+      el.style.top = Math.round((H - box.y) * s) + "px";
+      el.style.width = Math.max(Math.round(box.w * s), 24) + "px";
+      el.style.height = Math.max(Math.round(box.h * s), 12) + "px";
+      const { size, lineH } = resolveFieldLineStyle(styleOverrides[k], 0, baseCoordForField(k));
+      el.style.fontSize = Math.max(1, size * s) + "px";
+      el.style.lineHeight = Math.max(1, lineH * s) + "px";
+      if (handle) {
+        handle.style.left = Math.max(0, parseFloat(el.style.left) - 2) + "px";
+        handle.style.top = Math.max(0, parseFloat(el.style.top) - 18) + "px";
+      }
+      updateFieldOverflow(k);
+    }
     if (activeFieldKey) notifyActiveField();
+  }
+
+  // lbz-v2-05: Reset columns (regenerate from zoneData; drops the boxes' moves, text edits and zone
+  // styles) and the non-blocking stale guard. Both only on a zoned BOL.
+  let staleBannerEl: HTMLDivElement | null = null;
+  if (zcZoneData) {
+    const resetZcBtn = document.createElement("button");
+    resetZcBtn.type = "button";
+    resetZcBtn.textContent = "Reset columns";
+    resetZcBtn.title = "Rebuild the zone columns from this BOL's load (drops moves, text edits and styles on them)";
+    resetZcBtn.style.cssText = cancelBtn.style.cssText;
+    resetZcBtn.addEventListener("click", () => {
+      if (!zcZoneData) return;
+      zcItems = buildZoneColumns(zcZoneData, fonts.regular).items;
+      for (const k of Object.keys(styleOverrides)) if (isZoneColKey(k)) delete styleOverrides[k];
+      if (activeFieldKey && isZoneColKey(activeFieldKey)) {
+        activeFieldKey = null;
+        notifyActiveField();
+      }
+      buildZcBoxes();
+      relayoutNow();
+    });
+    actionBar.insertBefore(resetZcBtn, cancelBtn);
+
+    const jobId = (bol as { job_id?: unknown }).job_id;
+    if (zcSourceHash && jobId) {
+      // Fails open: a failed fetch (or a job with no line items) shows nothing.
+      void (async () => {
+        try {
+          const res = await fetch(`/v2/api/jobs/${encodeURIComponent(String(jobId))}`);
+          if (!res.ok) return;
+          const json = await res.json();
+          const job = json?.job;
+          if (!job || !Array.isArray(job.line_items)) return;
+          if (hashJobZoneData(job.line_items as JobZoneLineItem[]) === zcSourceHash || !mountEl.isConnected) return;
+          staleBannerEl = document.createElement("div");
+          staleBannerEl.setAttribute("role", "status");
+          staleBannerEl.style.cssText =
+            "flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:8px 12px 0;padding:6px 12px;border-radius:8px;background:var(--warn-bg,#fef3c7);border:1px solid var(--warn-border,#f59e0b);color:var(--warn-text,#78350f);font-size:13px;font-weight:600;";
+          const msg = document.createElement("span");
+          msg.textContent = "Load changed since this BOL was edited — zone quantities may be stale.";
+          const dismiss = document.createElement("button");
+          dismiss.type = "button";
+          dismiss.textContent = "Dismiss";
+          dismiss.style.cssText =
+            "min-height:44px;padding:0 14px;border-radius:6px;border:1px solid currentColor;background:transparent;color:inherit;cursor:pointer;font-size:13px;font-weight:600;";
+          dismiss.addEventListener("click", () => {
+            staleBannerEl?.remove();
+            staleBannerEl = null;
+          });
+          staleBannerEl.appendChild(msg);
+          staleBannerEl.appendChild(dismiss);
+          mountEl.insertBefore(staleBannerEl, scrollArea);
+        } catch {
+          // fail open — never block the editor on a network hiccup
+        }
+      })();
+    }
   }
 
   applyBtn.addEventListener("click", () => {

@@ -97,7 +97,7 @@
     - [x] lbz-v2-02 job pull, planner, per-zone load list, save/restore
     - [x] lbz-v2-03 diagram, PDF, Customize (the sliver-label fix is v2-only; the legacy bug item stays open)
     - [x] lbz-v2-04 Generate BOL zone data
-    - [ ] lbz-v2-05 BOL zone-column editing
+    - [x] lbz-v2-05 BOL zone-column editing
   - [ ] lb-diag-01 follow-up — decide the `EditorGuards.tsx` overflow wording ("…past the rear of the trailer there").
     lb-diag-01 renamed the floor terms to WALL / DOORS but left this message alone. Which end a row overflows from is a
     judgement call.
@@ -517,15 +517,7 @@
 - [ ] **Hoist shared pdf-lib helpers** (`wrapText`, `drawRight`, `hr`, logo embed) out of `cutList.ts` / `loadingSheet.ts` into one lib. Must stay pixel-parity for the cut list. (Follow-on from lgx-loadsheet-01.)
 - [ ] Backfill `load_manifest` for multi-load orders generated before lgx-loadsheet-02 is not possible (split was never stored). Those print the fallback banner until regenerated from the load builder.
 - [ ] Generating a BOL from the logistics dashboard modal (job path, no load builder) for a load replaces that load's row with a null manifest. Consider carrying the prior manifest forward on regenerate-replace if it causes confusion. (Follow-on from lgx-loadsheet-02.)
-- [ ] **Unit 3 follow-up (lbz-bol-02) — v2 zone-column editing UI.** `bolShared.ts`'s
-  `zonecolumns` field type, `buildZoneColumns` layout algorithm, and `ZoneColumnsOverride`
-  hydration were ported 1:1 (lbz-bol-02, rendering parity only) — but legacy's `bol-editor.js`
-  zone-box drag/edit/"Reset columns"/stale-guard UI (lbz-bol-01 §3/§4) was NOT ported. Fold this
-  into the v2 load builder port (Unit 3) once its BOL generation/edit surface exists: N
-  draggable/editable zone-column boxes (skip the generic per-field FIELD_MAP loop for
-  `type:"zonecolumns"` and `commodity` on a zoned bol, same as legacy), a "Reset columns" action
-  that regenerates from `ZoneColumnsOverride.zoneData` via `buildZoneColumns`, and a stale-guard
-  banner comparing a fresh `hashJobZoneData` recompute against the stored `sourceHash`. Also: v2 has no `zcZoneData` concept, so `positionAll` always draws an editable commodity box even on a zoned BOL (legacy skips it). Same fix.
+- [ ] **lbz-v2-05 follow-up — zone columns can't be resized, and `_pos` doesn't move them.** `bolShared.layoutBol` places each zone column from its item's `x`/`y` and never reads `_pos.zoneColN` or `_size.zoneColN`, so the v2 editor (like legacy) moves a zone column by rewriting its item's x/y and offers no width handle. If a resizable zone column is wanted, it's a paired render change in both `bolShared.ts` and `logistics/bol-shared.js` (bilateral BOL parity).
 - [ ] **`lb-ui-04` follow-up — confirm whether `bols/route.ts`'s "wrangler dev writes hit production" header comment is still accurate.** This prompt found local `next dev` (via `getCloudflareContext()`'s `getPlatformProxy`) uses a fully local, isolated Miniflare SQLite D1 emulation (`.wrangler/state/v3/d1/miniflare-D1DatabaseObject/*.sqlite`), not a live connection to prod or the declared `preview_database_id`. This may not actually conflict with that comment (`wrangler dev --remote` does hit prod; the comment may predate the current toolchain/describe a different invocation) — flagged as needing confirmation rather than asserted wrong, and not edited (`bols/route.ts` is out of this prompt's fence).
 - [ ] **Sprint Phase 3 — enable `lb-ui-05`'s deferred on-the-fly part-creation write path.** Legacy's `prefillFromJob` creates a new part via `POST /api/parts` when a line item matches nothing; this sprint's port surfaces the unmatched line as a warning instead and does not write. Re-enable once Steve has reviewed the sprint's Phase 2 integration testing and the unfenced-`/api/parts` risk (see the sprint charter's "one sprint-wide exception").
 - [ ] **`lb-ui-05` follow-up — export `packEngine.ts`'s `colorForSku` instead of duplicating it.** `jobPull.ts`'s `colorForSkuId` is a byte-for-byte copy of `packEngine.ts`'s private, unexported `colorForSku` (same palette, same hash) so the job-pull preview's swatches match the eventual trailer-diagram colors. `packEngine.ts` is closed/ratchet-guarded so this prompt couldn't export it directly — worth doing in a future dedicated engine prompt to remove the duplicate. (2026-09-16: `TrailerDiagram.tsx` now renders the per-SKU colors that were already being computed — column border stripes + a per-trailer legend — so the on-screen gap this item worried about is closed; this item itself stays open, since it's about the `colorForSku`/`colorForSkuId` duplication, which is unchanged.)
