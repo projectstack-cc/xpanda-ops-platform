@@ -10402,6 +10402,9 @@ current series).
   `/safety/pdfs/*`, `/training/*`, `/qc/*` 301 to their current homes. In the new repo only: Diamond Crystal PDF
   filename fixed (trailing space), Browse filter box wired (it was never connected), notif bell / manifest /
   training card removed. Repo owner is projectstack-cc (the prompt's `Zer0Flaw` account does not exist).
+- **sds-01b — CI live: projectstack-cc/xpanda-sds deploys to xpanda-sds on push (token xpanda-sds-ci,
+  Pages:Edit).** First green run → deploy `9b6b1c2d-1ffb-4c41-bafd-b7c00dc04ae4`. Print-ready SDS-Index.pdf +
+  SDS-Binder.pdf (382 pp, QR verified) built outside both repos for the paper backup.
 
 - **P441 — Safety module migrated off its private i18n IIFE onto the shared `window.I18n` engine
   (P440, same batch).** `safety/i18n.js` keeps its outer IIFE, `translations` table, and
