@@ -104,6 +104,7 @@ import type { Dimensions, PackColumn, PackRow, PackTrailer } from "@/lib/packEng
 import { thicknessColor, thicknessLabel } from "@/lib/thicknessPalette";
 import { useLang } from "@/components/lang";
 import { isZonedTrailer, zoneBand, zoneCellsOf, zoneOutlineEdges, type OutlineEdge } from "@/lib/zoneLayout";
+import { stackBands } from "@/lib/stackBands";
 
 interface SelectedColumn {
   rowIndex: number;
@@ -449,13 +450,12 @@ export default function TrailerDiagram({
                 const verdict = editable ? columnVerdict?.(rowIndex, columnIndex) ?? null : null;
                 const showLabel = column.colWidth / dims.width >= MIN_WIDTH_FRACTION_FOR_LABEL && column.colLength / row.rowLength >= MIN_DEPTH_FRACTION_FOR_LABEL;
                 const baseLayer = column.layers[0];
-                const topLayer = column.layers.length > 1 ? column.layers[column.layers.length - 1] : null;
                 const baseColor = baseLayer ? thicknessColor(baseLayer.unitHeight) : null;
-                const topColor = topLayer ? thicknessColor(topLayer.unitHeight) : null;
                 const columnHeightPx = (heightPct / 100) * bandHeightPx;
-                const topFrac = topLayer && column.totalHeight > 0 ? (topLayer.unitHeight * topLayer.count) / column.totalHeight : 0;
-                const topBandPx = topLayer ? Math.min(columnHeightPx * 0.6, Math.max(TOP_BAND_MIN_PX, columnHeightPx * topFrac)) : 0;
-                const tag = topLayer ? "TOP-OFF" : column.stackKind === "partial" ? "LEFTOVER" : null;
+                // lb-diag-03: one band per top-off layer (top edge first), shared sizing with the PDF.
+                const { bands, baseHeight } = stackBands(column, columnHeightPx, TOP_BAND_MIN_PX);
+                const hasTopOff = column.layers.length > 1;
+                const tag = hasTopOff ? "TOP-OFF" : column.stackKind === "partial" ? "LEFTOVER" : null;
 
                 return (
                   <button
@@ -493,19 +493,26 @@ export default function TrailerDiagram({
                         !
                       </span>
                     )}
-                    {topLayer && topColor && (
-                      <span
-                        className="relative w-full shrink-0 flex items-center justify-center"
-                        style={{ height: topBandPx, background: topColor.bg, color: topColor.fg, borderBottom: `2px dashed ${baseColor?.fg}` }}
-                      >
-                        {topColor.hatched && <span className="absolute inset-0 pointer-events-none" style={hatchStyle(topColor.fg)} aria-hidden="true" />}
-                        {showLabel && (
-                          <span className="relative text-[14px] leading-none font-mono font-semibold tabular-nums truncate px-1">
-                            +{thicknessLabel(topLayer.unitHeight)}×{topLayer.count}
-                          </span>
-                        )}
-                      </span>
-                    )}
+                    {bands.map((band) => {
+                      const layer = column.layers[band.layerIndex];
+                      const layerColor = thicknessColor(layer.unitHeight);
+                      const below = column.layers[band.layerIndex - 1];
+                      const belowFg = below ? thicknessColor(below.unitHeight).fg : baseColor?.fg;
+                      return (
+                        <span
+                          key={band.layerIndex}
+                          className="relative w-full shrink-0 flex items-center justify-center"
+                          style={{ height: band.height, background: layerColor.bg, color: layerColor.fg, borderBottom: `2px dashed ${belowFg}` }}
+                        >
+                          {layerColor.hatched && <span className="absolute inset-0 pointer-events-none" style={hatchStyle(layerColor.fg)} aria-hidden="true" />}
+                          {showLabel && (
+                            <span className="relative text-[14px] leading-none font-mono font-semibold tabular-nums truncate px-1">
+                              +{thicknessLabel(layer.unitHeight)}×{layer.count}
+                            </span>
+                          )}
+                        </span>
+                      );
+                    })}
                     <span className="relative w-full flex-1 min-h-0 flex flex-col items-center justify-center gap-0.5">
                       {baseColor?.hatched && <span className="absolute inset-0 pointer-events-none" style={hatchStyle(baseColor.fg)} aria-hidden="true" />}
                       {showLabel && baseLayer && (
@@ -514,7 +521,7 @@ export default function TrailerDiagram({
                         </span>
                       )}
                       {/* Stacked under the label (never over it); dropped when both don't fit. */}
-                      {showLabel && tag && columnHeightPx - topBandPx >= 32 && (
+                      {showLabel && tag && baseHeight >= 32 && (
                         <span className="relative text-[9px] font-semibold tracking-wide leading-none px-1 py-0.5 rounded-sm bg-surface text-text border border-[var(--line)]">
                           {tag}
                         </span>

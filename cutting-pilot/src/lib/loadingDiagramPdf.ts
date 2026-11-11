@@ -65,6 +65,7 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import type { Dimensions, PackColumn, PackRow, PackTrailer, PackSku } from "./packEngine";
 import { thicknessColor } from "./thicknessPalette";
+import { stackBands } from "./stackBands";
 import { isZonedTrailer, loadOrderWallToDoors, zoneBand, zoneCellsOf, zoneOutlineEdges, zoneSegments } from "./zoneLayout";
 
 // --- pure helpers (exported for loadingDiagramPdf.selfcheck.ts) ---
@@ -551,10 +552,11 @@ function drawDiagram(page: PDFPage, font: PDFFont, fontBold: PDFFont, trailer: P
   // Column rects, filled by thickness (lbr-05). The top band of a topped stack sits at the column's
   // top edge (the same side TrailerDiagram.tsx draws it), sized by the top layer's share of the
   // stack height with a readable minimum, above a dashed line in the base fg.
+  // lb-diag-03: every top-off layer gets its own band (top layer at the top edge, then down), sized
+  // by stackBands() — the same rule TrailerDiagram.tsx uses.
   for (const rect of layoutColumnRects(trailer, dims, box)) {
     const column = trailer.rows[rect.rowIndex].columns[rect.columnIndex];
     const base = column.layers[0];
-    const top = column.layers.length > 1 ? column.layers[column.layers.length - 1] : null;
     if (!base) continue;
     if (column.onEdge) {
       // lb-box-03: true narrow width, thickness color, always hatched (the EDGE treatment, B/W safe);
@@ -568,19 +570,20 @@ function drawDiagram(page: PDFPage, font: PDFFont, fontBold: PDFFont, trailer: P
     page.drawRectangle({ x: rect.x, y: rect.y, width: rect.width, height: rect.height, color: parseHexColor(baseColor.bg) });
     if (baseColor.hatched) drawHatch(page, rect, parseHexColor(baseColor.fg));
 
-    let baseArea = { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
-    if (top) {
-      const topColor = thicknessColor(top.unitHeight);
-      const total = column.totalHeight > 0 ? column.totalHeight : base.unitHeight * base.count + top.unitHeight * top.count;
-      const frac = total > 0 ? (top.unitHeight * top.count) / total : 0;
-      const bandH = Math.min(rect.height * 0.6, Math.max(rect.height * frac, Math.min(12, rect.height * 0.45)));
-      const band = { x: rect.x, y: rect.y + rect.height - bandH, width: rect.width, height: bandH };
-      page.drawRectangle({ ...band, color: parseHexColor(topColor.bg) });
-      if (topColor.hatched) drawHatch(page, band, parseHexColor(topColor.fg));
-      page.drawLine({ start: { x: band.x, y: band.y }, end: { x: band.x + band.width, y: band.y }, thickness: 1.5, color: parseHexColor(baseColor.fg), dashArray: [3, 2] });
-      drawFittedLabel(page, fontBold, `+${fmtNum(top.unitHeight)}"×${top.count}`, band, parseHexColor(topColor.fg));
-      baseArea = { x: rect.x, y: rect.y, width: rect.width, height: rect.height - bandH };
+    const { bands, baseHeight } = stackBands(column, rect.height, Math.min(12, rect.height * 0.45));
+    let yCursor = rect.y + rect.height; // pdf-lib y is bottom-up: the column's top edge
+    for (const b of bands) {
+      const layer = column.layers[b.layerIndex];
+      const layerColor = thicknessColor(layer.unitHeight);
+      const belowFg = thicknessColor(column.layers[b.layerIndex - 1].unitHeight).fg;
+      const band = { x: rect.x, y: yCursor - b.height, width: rect.width, height: b.height };
+      page.drawRectangle({ ...band, color: parseHexColor(layerColor.bg) });
+      if (layerColor.hatched) drawHatch(page, band, parseHexColor(layerColor.fg));
+      page.drawLine({ start: { x: band.x, y: band.y }, end: { x: band.x + band.width, y: band.y }, thickness: 1.5, color: parseHexColor(belowFg), dashArray: [3, 2] });
+      drawFittedLabel(page, fontBold, `+${fmtNum(layer.unitHeight)}"×${layer.count}`, band, parseHexColor(layerColor.fg));
+      yCursor -= b.height;
     }
+    const baseArea = { x: rect.x, y: rect.y, width: rect.width, height: baseHeight };
     drawFittedLabel(page, fontBold, `${fmtNum(base.unitHeight)}"×${base.count}`, baseArea, parseHexColor(baseColor.fg));
     page.drawRectangle({ x: rect.x, y: rect.y, width: rect.width, height: rect.height, borderColor: LINE, borderWidth: 1.2 });
   }

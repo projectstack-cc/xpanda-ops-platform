@@ -520,5 +520,29 @@ export async function runLoadingDiagramPdfSelfCheck(): Promise<{ pass: boolean; 
     check("lbz-v2-03: a zone label with a non-WinAnsi character doesn't break the PDF", !threw);
   }
 
+  // lb-diag-03: a 3-size stack draws its middle layer too (it used to draw only base + top).
+  {
+    const L = (id: string, unitHeight: number, count: number) => ({ skuId: id, skuName: `SKU ${id}`, skuCode: `${id}-1`, color: "#333333", unitHeight, count, orientation: { length: 48, width: 48, height: unitHeight, label: "flat" } });
+    const skus: PackSku[] = [
+      { id: "T2", name: "SKU T2", sku: "T2-1", length: 48, width: 48, height: 2, weight: 5, allowRotation: true },
+      { id: "T1", name: "SKU T1", sku: "T1-1", length: 48, width: 48, height: 1, weight: 3, allowRotation: true },
+      { id: "TH", name: "SKU TH", sku: "TH-1", length: 48, width: 48, height: 0.5, weight: 2, allowRotation: true },
+    ];
+    const col3 = makeColumn(0, 48, 48, [L("T2", 2, 10), L("T1", 1, 5), L("TH", 0.5, 4)]);
+    const t3: PackTrailer = { ...makeFixture(), rows: [makeRow(0, 48, [col3])], usedLength: 48, totalStacks: 1, totalUnits: 19 };
+    let threw3 = false;
+    let text3 = "";
+    try {
+      text3 = pageText(await PDFDocument.load(await buildLoadingDiagramPdf(t3, 0, DIMS, skus)), 0);
+    } catch (e) {
+      threw3 = true;
+      text3 = String(e);
+    }
+    const lines3 = text3.split("\n");
+    check("lb-diag-03: a 3-layer column builds a PDF without throwing", !threw3, threw3 ? text3 : undefined);
+    check("lb-diag-03: the PDF draws the middle layer's band label (+1\"×5)", lines3.includes('+1"×5'), lines3.filter((l) => l.startsWith("+")).join(" | "));
+    check("lb-diag-03: ...and the top layer's (+0.5\"×4) and the base's (2\"×10)", lines3.some((l) => l.startsWith("+") && l.endsWith("×4")) && lines3.includes('2"×10'), lines3.filter((l) => l.includes("×")).join(" | "));
+  }
+
   return { pass: results.every((r) => r.pass), results };
 }
