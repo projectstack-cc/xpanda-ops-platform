@@ -12,6 +12,9 @@
 // items, or — when a load has no manifest — the full order's items under a "Load split not recorded"
 // banner. Header shows "Load N of M" plus only that load's Bay / Trailer / BOL.
 //
+// stops-02: a trailer-group order prints its stop (e.g. "2ND STOP") on its own yellow band under the
+// Delivery band, and the order's packing instructions print in a box between Total pieces and NOTES.
+//
 // lgx-loadsheet-03: big auto-fit `Inv #...` box centered in the page-1 header band (fitInvoiceBox, pure,
 // self-checked); delivery time 16pt bold and the Loaded by / Date row on yellow highlight bands with a
 // thin black border (mono dock printers render yellow near-white).
@@ -19,6 +22,7 @@ import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFP
 import { formatCutListAddress, formatCutListDims, type CutListJob } from "@/lib/cutList";
 import type { LoadManifestItem } from "@/lib/logistics/loadManifest";
 import { loadSuffix } from "@/lib/loadTimes";
+import { stopLabel } from "@/lib/trailerStops";
 
 export interface LoadingSheetLineItem {
   part_number: string | null;
@@ -52,6 +56,10 @@ export interface LoadingSheetOrder {
   carrier: string | null;
   delivery_time: string | null;
   notes: string | null;
+  /** stops-02: stop within the trailer group (jobs.trailer_stop); null/absent = no stop band. */
+  trailer_stop?: number | null;
+  /** stops-02: jobs.packing_instructions; blank/absent = no Packing Instructions block. */
+  packing_instructions?: string | null;
   ship_to_company: string | null;
   ship_to_attention: string | null;
   ship_to_street: string | null;
@@ -422,6 +430,19 @@ export async function buildLoadingSheetPdf(orders: LoadingSheetOrder[]): Promise
         }
         ry -= 4;
       }
+      // stops-02: the trailer stop on its own bordered yellow band, same style as Delivery. With no
+      // delivery band and no live text it simply takes that slot (ry hasn't moved).
+      if (order.trailer_stop) {
+        const sLines = wrapText(stopLabel(order.trailer_stop).toUpperCase(), fontBold, 16, rightW - 2 * 6);
+        const sBandW = Math.max(...sLines.map((l) => fontBold.widthOfTextAtSize(l, 16))) + 12;
+        const sBandH = sLines.length * 19 + 8;
+        const sBandTop = ry + 12;
+        page.drawRectangle({ x: colRightX, y: sBandTop - sBandH, width: sBandW, height: sBandH, color: highlight, borderColor: black, borderWidth: HL_BORDER });
+        sLines.forEach((l, i) => {
+          page.drawText(l, { x: colRightX + 6, y: sBandTop - 4 - 15 - i * 19, size: 16, font: fontBold, color: black });
+        });
+        ry -= sBandH + 6;
+      }
       // A multi-load sheet lists only its own load; otherwise every load (or none), as before.
       const loads = multi && sheet.load ? [sheet.load] : Array.isArray(order.loads) ? order.loads : [];
       if (!loads.length) {
@@ -513,8 +534,18 @@ export async function buildLoadingSheetPdf(orders: LoadingSheetOrder[]): Promise
 
     const notesLines = wrapText(order.notes, font, 10, right - margin - NOTES_PAD * 2);
     const notesBoxH = Math.max(NOTES_MIN_H, notesLines.length * LH_NOTES + NOTES_PAD * 2);
-    // Height consumed below the last row by total + NOTES label + box (see drawTail).
-    const tailHeight = 3 + 16 + 24 + 14 + notesBoxH;
+    // stops-02: Packing Instructions box (notes-box style). The user's line breaks are kept: split on
+    // \n first, then wrap each line (a blank typed line stays a blank line).
+    const packText = String(order.packing_instructions ?? "").trim();
+    const packLines = packText
+      ? packText.split("\n").flatMap((l) => (l.trim() ? wrapText(l, font, 10, right - margin - NOTES_PAD * 2) : [""]))
+      : [];
+    const packBoxH = packLines.length ? Math.max(NOTES_MIN_H, packLines.length * LH_NOTES + NOTES_PAD * 2) : 0;
+    const PACK_GAP = 20; // box bottom → NOTES label baseline
+    // label (14) + box (minus its 4pt lift above the label line) + gap; 0 when there are none.
+    const packBlockH = packLines.length ? 14 - 4 + packBoxH + PACK_GAP : 0;
+    // Height consumed below the last row by total + [packing block] + NOTES label + box (see drawTail).
+    const tailHeight = 3 + 16 + 24 + 14 + notesBoxH + packBlockH;
 
     const drawTail = (page: PDFPage, yStart: number, totalQty: number) => {
       let y = yStart - 3;
@@ -523,6 +554,17 @@ export async function buildLoadingSheetPdf(orders: LoadingSheetOrder[]): Promise
       page.drawText("Total pieces", { x: colDimsX, y, size: 10, font: fontBold, color: black });
       drawRightAt(page, String(totalQty), 11, fontBold, black, colQtyRight, y);
       y -= 24;
+      if (packLines.length) {
+        page.drawText("PACKING INSTRUCTIONS", { x: margin, y, size: 9, font: fontBold, color: gray });
+        const pTop = y - 14 + 4;
+        page.drawRectangle({ x: margin, y: pTop - packBoxH, width: right - margin, height: packBoxH, borderColor: rule, borderWidth: 1 });
+        let py = pTop - NOTES_PAD - 9;
+        for (const pl of packLines) {
+          if (pl) page.drawText(pl, { x: margin + NOTES_PAD, y: py, size: 10, font, color: black });
+          py -= LH_NOTES;
+        }
+        y -= packBlockH;
+      }
       page.drawText("NOTES", { x: margin, y, size: 9, font: fontBold, color: gray });
       y -= 14;
       const boxTop = y + 4;

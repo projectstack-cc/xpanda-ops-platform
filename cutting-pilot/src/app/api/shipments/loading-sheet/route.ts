@@ -100,7 +100,7 @@ export async function GET(request: NextRequest) {
       `SELECT s.job_id, s.ship_date, s.carrier AS s_carrier, s.notes AS s_notes, s.delivery_time AS s_delivery_time,
               j.invoice_number, j.customer, j.carrier AS j_carrier, j.delivery_time AS j_delivery_time, j.load_count AS j_load_count,
               j.ship_to_company, j.ship_to_attention, j.ship_to_street, j.ship_to_street2,
-              j.ship_to_city, j.ship_to_state, j.ship_to_zip
+              j.ship_to_city, j.ship_to_state, j.ship_to_zip, j.trailer_stop, j.packing_instructions
          FROM shipments s JOIN jobs j ON j.id = s.job_id
         WHERE s.direction = 'outbound' AND s.status <> 'cancelled'
           AND ${jobId ? "s.job_id = ?" : "s.ship_date = ?"}
@@ -206,6 +206,8 @@ export async function GET(request: NextRequest) {
         carrier: r.s_carrier || r.j_carrier || null,
         delivery_time: syntheticTime || orderDelivery,
         notes: r.s_notes ?? null,
+        trailer_stop: r.trailer_stop ?? null, // stops-02: stop band in the header
+        packing_instructions: r.packing_instructions ?? null, // stops-02: block above NOTES
         ship_to_company: r.ship_to_company ?? null,
         ship_to_attention: r.ship_to_attention ?? null,
         ship_to_street: r.ship_to_street ?? null,

@@ -64,6 +64,7 @@ import {
 import fontkit from "@pdf-lib/fontkit";
 import type { FuelLine } from "@/lib/logistics/fuelSurcharge";
 import qrcode from "qrcode-generator";
+import { stopLabel } from "@/lib/trailerStops";
 
 // ═══════════════════════════════════════════════════════════════════
 // COORDS — Single source of truth for PDF text placement.
@@ -544,6 +545,17 @@ export function wrapText(text: string, font: WidthMeasurer, fontSize: number, ma
   return lines;
 }
 
+// stops-02: appends the trailer stop (e.g. "2ND STOP") as its own line under the delivery time.
+// No stop (null/0) → the time comes back unchanged, so a stop-less BOL renders exactly as before.
+// Applied in layoutBol AFTER the deliveryTime override is resolved; never written into
+// render_overrides.deliveryTime or bols.delivery_time (loadTimesSync rewrites both).
+// Legacy twin: withStopLine in logistics/bol-shared.js — keep identical (bilateral BOL parity).
+export function withStopLine(time: string | null | undefined, stop: number | null | undefined): string {
+  if (!stop) return time ?? "";
+  const label = stopLabel(stop).toUpperCase();
+  return time ? time + "\n" + label : label;
+}
+
 // Formats an ISO 'YYYY-MM-DD' date as 'MM/DD/YYYY'; passes through anything else unchanged.
 // Extracted from generatePdf's inline arrow function (structural change only; see file header).
 export function formatBolDate(iso: string | null | undefined): string {
@@ -976,8 +988,10 @@ export function layoutBol(bol: BolRecord, fonts: BolLayoutFonts): LayoutBolResul
   };
 
   // ── Delivery time (bold red; multiline-capable via override) ──
-  const _deliveryTimeVal =
-    "deliveryTime" in _ov ? (Array.isArray(_ov.deliveryTime) ? _ov.deliveryTime.join("\n") : _ov.deliveryTime) : bol.delivery_time;
+  const _deliveryTimeVal = withStopLine(
+    "deliveryTime" in _ov ? (Array.isArray(_ov.deliveryTime) ? _ov.deliveryTime.join("\n") : _ov.deliveryTime) : bol.delivery_time,
+    bol.trailer_stop
+  );
   {
     const dc = off("deliveryTime", { ...COORDS.deliveryTime, bold: true });
     const { runs: r, box } = layoutField("deliveryTime", _deliveryTimeVal || "", _style.deliveryTime, fonts, {
@@ -1224,6 +1238,7 @@ export interface BolOverrides {
 
 export interface BolRecord {
   delivery_time?: string;
+  trailer_stop?: number | null; // stops-02: copy of jobs.trailer_stop, printed under the time
   date?: string;
   bol_number?: string | number;
   carrier_name?: string;

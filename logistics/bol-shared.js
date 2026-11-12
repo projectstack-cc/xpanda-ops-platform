@@ -646,9 +646,9 @@ window.BolShared = (function() {
     };
 
     // ── Delivery time (bold red; multiline-capable via override) ──
-    const _deliveryTimeVal = ('deliveryTime' in _ov)
+    const _deliveryTimeVal = withStopLine(('deliveryTime' in _ov)
       ? (Array.isArray(_ov.deliveryTime) ? _ov.deliveryTime.join('\n') : _ov.deliveryTime)
-      : bol.delivery_time;
+      : bol.delivery_time, bol.trailer_stop);
     {
       const dc = off('deliveryTime', { ...COORDS.deliveryTime, bold: true });
       const { runs: r, box } = layoutField('deliveryTime', _deliveryTimeVal || '', _style.deliveryTime, fonts, {
@@ -1149,6 +1149,25 @@ window.BolShared = (function() {
     });
   }
 
+  // stops-02: trailer stop line under the delivery time. Mirrors withStopLine (bolShared.ts) and
+  // stopLabel (lib/trailerStops.ts) in cutting-pilot — legacy can't import, so keep these identical.
+  // No stop (null/0) → time unchanged. Never written into render_overrides.deliveryTime.
+  function stopOrdinalLabel(n) {
+    const mod100 = n % 100, mod10 = n % 10;
+    let suffix = 'th';
+    if (mod100 < 11 || mod100 > 13) {
+      if (mod10 === 1) suffix = 'st';
+      else if (mod10 === 2) suffix = 'nd';
+      else if (mod10 === 3) suffix = 'rd';
+    }
+    return n + suffix + ' Stop';
+  }
+  function withStopLine(time, stop) {
+    if (!stop) return time == null ? '' : time;
+    const label = stopOrdinalLabel(stop).toUpperCase();
+    return time ? time + '\n' + label : label;
+  }
+
   // ═══════════════════════════════════════════════════════════════════
   // PUBLIC API
   // ═══════════════════════════════════════════════════════════════════
@@ -1176,6 +1195,7 @@ window.BolShared = (function() {
     buildShipToLines,
     wrapText,
     formatBolDate,
+    withStopLine,
     confirmNoBolNumber,
   };
 

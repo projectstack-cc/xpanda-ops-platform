@@ -3,7 +3,7 @@
 // load) and loadManifest.ts's parseLoadManifest. Same check()/results shape as toLoadSheet.selfcheck.ts.
 // lgx-loadsheet-03: + fitInvoiceBox geometry (the header's centered invoice box); now async because the
 // Helvetica-Bold metrics come from a pdf-lib embed. Not part of the production build path.
-import { PDFDocument, StandardFonts } from "pdf-lib";
+import { PDFArray, PDFDocument, PDFRawStream, StandardFonts, decodePDFRawStream } from "pdf-lib";
 import { HEADER_BAND_H, INVOICE_BOX_MAX_SIZE, INVOICE_BOX_MIN_SIZE, LIVE_LOAD_GAP, LIVE_LOAD_TEXT_SIZE, buildLoadingSheetPdf, expandLoadingSheets, fitInvoiceBox, liveLoadText, placeLiveLoad, sheetCarrierText, sheetInvoiceText, type LoadingSheetLineItem, type LoadingSheetLoad, type LoadingSheetOrder } from "./loadingSheet";
 import { parseLoadManifest, type LoadManifestItem } from "./loadManifest";
 
@@ -41,6 +41,23 @@ function order(inv: string, loads: LoadingSheetLoad[]): LoadingSheetOrder {
 
 function load(n: number | null, manifest: LoadManifestItem[] | null): LoadingSheetLoad {
   return { load_number: n, trailer_number: n != null ? `T${n}` : null, bay_number: n, bol_number: n != null ? `B${n}` : null, manifest, delivery_time: null, carrier: "Carrier" };
+}
+
+// stops-02: each page's drawn text in content-stream order (pdf-lib Flate-compresses the streams and
+// writes Standard-14 text as `<hex> Tj`). One string per page, lines joined by "\n".
+async function pdfPageTexts(bytes: Uint8Array): Promise<string[]> {
+  const doc = await PDFDocument.load(bytes);
+  return doc.getPages().map((p) => {
+    const c = p.node.Contents();
+    const parts = c instanceof PDFArray ? c.asArray().map((r) => doc.context.lookup(r)) : [c];
+    let src = "";
+    for (const s of parts) {
+      if (s instanceof PDFRawStream) src += Buffer.from(decodePDFRawStream(s).decode()).toString("latin1");
+    }
+    return (src.match(/<([0-9A-Fa-f]*)> Tj/g) ?? [])
+      .map((t) => Buffer.from(t.slice(1, t.indexOf(">")), "hex").toString("latin1"))
+      .join("\n");
+  });
 }
 
 const m = (name: string, sku: string, pieces: number): LoadManifestItem => ({ name, sku, dims: "48 x 24 x 10", pieces });
@@ -206,6 +223,61 @@ export async function runLoadingSheetSelfCheck(): Promise<{ pass: boolean; resul
     const [a, b] = [norm(await buildLoadingSheetPdf([base])), norm(await buildLoadingSheetPdf([flagged]))];
     console.warn = origWarn; console.error = origErr;
     check("live: non-live sheet unchanged", a === b, `${a.length} vs ${b.length}`);
+  }
+
+  // stops-02: stop band in the header + Packing Instructions block above NOTES.
+  {
+    const origWarn = console.warn, origErr = console.error;
+    console.warn = () => {}; console.error = () => {};
+    const norm = (b: Uint8Array) => Buffer.from(b).toString("latin1").replace(/\/(CreationDate|ModDate) \([^)]*\)/g, "");
+    const one = (o: LoadingSheetOrder) => buildLoadingSheetPdf([o]);
+
+    // (a) no stop / no instructions — explicit nulls render the same bytes as the pre-stops-02 order shape.
+    const a0 = order("4200", [load(1, null)]);
+    const a = await one(a0);
+    const aNull = await one({ ...a0, trailer_stop: null, packing_instructions: null });
+    const aBlank = await one({ ...a0, trailer_stop: 0, packing_instructions: "   " });
+    const aText = await pdfPageTexts(a);
+    check("stops-02 (a): no stop/instructions → same bytes as without the fields", norm(a) === norm(aNull) && norm(a) === norm(aBlank));
+    check("stops-02 (a): 1 page, no STOP / PACKING INSTRUCTIONS text", aText.length === 1 && !/STOP|PACKING INSTRUCTIONS/.test(aText.join("\n")), JSON.stringify(aText));
+
+    // (b) stop 2 + one-line instructions, with a delivery time.
+    const b = await pdfPageTexts(await one({ ...a0, delivery_time: "Tue 8:00AM", trailer_stop: 2, packing_instructions: "Stack flat, no straps" }));
+    const bt = b[0] ?? "";
+    check(
+      "stops-02 (b): 1 page; 2ND STOP after Delivery, before the load line; PACKING INSTRUCTIONS between Total and NOTES",
+      b.length === 1 &&
+        bt.indexOf("Delivery: Tue 8:00AM") >= 0 && bt.indexOf("Delivery: Tue 8:00AM") < bt.indexOf("2ND STOP") &&
+        bt.indexOf("2ND STOP") < bt.indexOf("Load 1") &&
+        bt.indexOf("Total pieces") < bt.indexOf("PACKING INSTRUCTIONS") &&
+        bt.indexOf("PACKING INSTRUCTIONS") < bt.indexOf("Stack flat, no straps") &&
+        bt.indexOf("Stack flat, no straps") < bt.indexOf("NOTES"),
+      JSON.stringify(b)
+    );
+
+    // (c) a stop with no delivery time — the band takes the delivery slot.
+    const c = await pdfPageTexts(await one({ ...a0, trailer_stop: 3 }));
+    check("stops-02 (c): stop without delivery → 3RD STOP, no Delivery text", c.length === 1 && c[0].includes("3RD STOP") && !c[0].includes("Delivery:"), JSON.stringify(c));
+
+    // (d) ~40 lines of instructions push Total + Packing + NOTES onto a trailing page together.
+    const many = Array.from({ length: 40 }, (_, i) => `Instruction line ${i + 1}`).join("\n");
+    const d = await pdfPageTexts(await one({ ...a0, trailer_stop: 1, packing_instructions: many }));
+    const last = d[d.length - 1] ?? "";
+    check(
+      "stops-02 (d): long instructions → tail on a trailing page (Total + Packing + NOTES together)",
+      d.length === 2 && !d[0].includes("Total pieces") && last.includes("Total pieces") && last.includes("PACKING INSTRUCTIONS") &&
+        last.includes("Instruction line 40") && last.includes("NOTES") && d[0].includes("1ST STOP") && !last.includes("1ST STOP"),
+      JSON.stringify(d.map((t) => t.slice(0, 160)))
+    );
+
+    // Multi-load order: every load's sheet gets the stop band and the instructions.
+    const multi = await pdfPageTexts(await one({ ...order("4300", [load(1, null), load(2, null)]), trailer_stop: 2, packing_instructions: "Keep dry" }));
+    check(
+      "stops-02: multi-load → each load's sheet has 2ND STOP + PACKING INSTRUCTIONS",
+      multi.length === 2 && multi.every((t) => t.includes("2ND STOP") && t.includes("Keep dry")),
+      JSON.stringify(multi.map((t) => t.slice(0, 120)))
+    );
+    console.warn = origWarn; console.error = origErr;
   }
 
   return { pass: results.every((r) => r.pass), results };

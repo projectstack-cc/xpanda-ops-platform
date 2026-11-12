@@ -471,6 +471,8 @@
 
 ## Logistics (v2)
 
+- [ ] **`loadingSheet.selfcheck.ts` "live: non-live sheet unchanged" is flaky (seen stops-02).** Failed once with equal-length, different bytes; passed on 4 reruns and on HEAD. Likely a timestamp in the PDF the `CreationDate/ModDate` strip doesn't catch. Diff the two byte strings when it next fails.
+
 - [ ] **live-03 follow-up — Live load arrival on the dock tablet (declined for now, live-03).** The arrival time shows
   on the schedule, Job Board, Logistics and the loading sheet; Steve chose not to put it on `/v2/dock` yet.
 - [ ] **mlc-05 follow-up — carrier list management in `/v2/admin`** (rename / deactivate / reorder `bol_carriers`).
@@ -619,7 +621,6 @@
 
 ## Job Board
 
-- [ ] **stops-02 — print the trailer stop** on the BOL Time box (paired `bolShared.ts` + `bol-shared.js`) and the loading sheet (stop band + Packing Instructions block). Prompt: `Prompts/stops-02.md`.
 - [ ] **stops-03 — StopChip display** on Carrier View, v2 logistics, v2 Job Board rows (members sorted by stop) + Classic read-only. Prompt: `Prompts/stops-03.md`.
 - [ ] **Load Builder could pack a trailer group by stop order** (last stop loads first, at the wall). Scope only if Steve asks. (from stops-01)
 

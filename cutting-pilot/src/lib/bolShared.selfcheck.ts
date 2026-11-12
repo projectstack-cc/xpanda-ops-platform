@@ -30,6 +30,7 @@ import {
   layoutField,
   layoutBol,
   generatePdf,
+  withStopLine,
   type WidthMeasurer,
   type BolRecord,
   type ZoneSegment,
@@ -615,6 +616,33 @@ export function runBolSharedSelfCheck(): { pass: boolean; results: CheckResult[]
       zc0.length === 1 && zc0[0].maxWidth === undefined && !boxes.commodity,
       JSON.stringify({ count: zc0.length, maxWidth: zc0[0]?.maxWidth, hasCommodityBox: !!boxes.commodity })
     );
+  }
+
+  // --- Trailer stop under the delivery time (stops-02) ---
+  {
+    check("stops-02: withStopLine no stop → time unchanged", withStopLine("Tues 8:00AM", null) === "Tues 8:00AM" && withStopLine("Tues 8:00AM", 0) === "Tues 8:00AM" && withStopLine(undefined, null) === "");
+    check("stops-02: withStopLine stop + time", withStopLine("Tues 8:00AM", 2) === "Tues 8:00AM\n2ND STOP");
+    check("stops-02: withStopLine stop, no time", withStopLine("", 2) === "2ND STOP" && withStopLine(null, 1) === "1ST STOP");
+    check("stops-02: withStopLine multi-line time + stop", withStopLine("Tues\n8:00AM", 3) === "Tues\n8:00AM\n3RD STOP");
+
+    const fixture: BolRecord = { delivery_time: "Tues 8:00AM", bol_number: "B1", carrier_name: "Seal Express" };
+    const dt = (b: BolRecord) => layoutBol(b, FIXED_FONTS).runs.filter((r) => r.fieldKey === "deliveryTime");
+    const withStop = dt({ ...fixture, trailer_stop: 2 });
+    const timeRun = withStop.find((r) => r.text === "Tues 8:00AM");
+    const stopRun = withStop.find((r) => r.text === "2ND STOP");
+    check(
+      "stops-02: layoutBol trailer_stop 2 → red bold '2ND STOP' run below the time run",
+      !!timeRun && !!stopRun && stopRun.color === "red" && stopRun.fontKey === timeRun.fontKey && /bold/i.test(stopRun.fontKey) &&
+        stopRun.size === timeRun.size && stopRun.y < timeRun.y && stopRun.x === timeRun.x,
+      JSON.stringify(withStop)
+    );
+    const ovStop = dt({ ...fixture, trailer_stop: 2, _overrides: { deliveryTime: "Wed 9AM" } });
+    check("stops-02: stop follows an override time", JSON.stringify(ovStop.map((r) => r.text)) === JSON.stringify(["Wed 9AM", "2ND STOP"]), JSON.stringify(ovStop.map((r) => r.text)));
+    const noStop = layoutBol({ ...fixture, trailer_stop: null }, FIXED_FONTS);
+    const pre = layoutBol(fixture, FIXED_FONTS); // no trailer_stop key at all = pre-change input
+    check("stops-02: trailer_stop null → runs deep-equal to pre-change output", JSON.stringify(noStop.runs) === JSON.stringify(pre.runs) && JSON.stringify(noStop.boxes) === JSON.stringify(pre.boxes));
+    const onlyStop = dt({ bol_number: "B1", trailer_stop: 4 });
+    check("stops-02: no time + stop → box reads just the stop", JSON.stringify(onlyStop.map((r) => r.text)) === JSON.stringify(["4TH STOP"]), JSON.stringify(onlyStop.map((r) => r.text)));
   }
 
   // --- Two-box commodity (bol-2col-01) ---
