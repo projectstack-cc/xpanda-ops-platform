@@ -34,6 +34,7 @@ import CalendarView from "./CalendarView";
 import BoardRowEdit from "./BoardRowEdit";
 import type { AssignableUser } from "./JobAssigneeChips";
 import LinkedTableGroups from "@/components/linked/LinkedTableGroups";
+import StopChip from "@/components/StopChip";
 import { JobStatusBadge, PriorityBadge, STATUS_VARIANTS } from "./badges";
 import LinePills from "./LinePills";
 import { PROCESSES, type JobProcess } from "@/lib/processes";
@@ -63,6 +64,7 @@ export interface BoardJob {
   processes: JobProcess[];
   // jb-06: trailer-group candidates in the edit modal (legacy filter needs it).
   trailer_group_id: string | null;
+  trailer_stop?: number | null; // stops-03
   // board-search-01: true when archived_at is set (only search results can be archived).
   is_archived?: boolean;
   // live-01: live-load flags + load count (lib/logistics/liveLoad.ts).
@@ -526,6 +528,7 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
                                   {!isReadOnlyJob(job) &&
                                     (expandedId === job.id ? <ChevronDown size={12} /> : <ChevronRight size={12} />)}
                                   {job.invoice_number ? `INV# ${job.invoice_number}` : "No INV#"}
+                                  <StopChip stop={job.trailer_stop} className="ml-1" />
                                   {job.live_load && <LiveLoadChip loads={partialLiveLoads(job)} time={liveTimeLabel(job.live_times, job.live_loads)} className="ml-1" />}
                                 </div>
                               </td>

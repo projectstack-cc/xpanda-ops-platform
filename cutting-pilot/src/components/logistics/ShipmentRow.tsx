@@ -12,6 +12,7 @@ import { formatUsdCents } from "@/lib/money";
 import { capLoadTimesLabel } from "@/lib/loadTimes";
 import type { ShipmentDetail, ShipmentListItem } from "./types";
 import { LiveLoadChip, liveTimeLabel } from "@/components/LiveLoadMarker";
+import StopChip from "@/components/StopChip";
 
 const badgeBase = "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap";
 
@@ -126,6 +127,7 @@ export default function ShipmentRow({
         <td className="px-3 py-[8.8px] align-top">
           <div className="font-mono tabular-nums text-sm font-semibold text-text">
             {s.invoice_number ? `INV# ${s.invoice_number}` : "—"}
+            <StopChip stop={s.trailer_stop} className="ml-2 align-middle" />
             {s.day_loads ? (
               // split-days-02: split day-row -- which of the order's loads ship on this day.
               <span className="ml-2 font-sans text-[11px] font-bold text-[var(--brand)]">

@@ -13,7 +13,7 @@
 //     in a day list only means search/a filter hid its partner — it renders as a plain row.
 import { Fragment, type ReactNode } from "react";
 import { Link2 } from "lucide-react";
-import { groupRows, type GroupKeyed } from "@/lib/linkedGroups";
+import { byTrailerStop, groupRows, type GroupKeyed } from "@/lib/linkedGroups";
 
 export default function LinkedTableGroups<T extends GroupKeyed>({
   rows,
@@ -44,7 +44,8 @@ export default function LinkedTableGroups<T extends GroupKeyed>({
     plain = [];
   };
 
-  for (const block of groupRows(rows)) {
+  // stops-03: members of a linked block list in stop order (unset last).
+  for (const block of groupRows(rows, byTrailerStop)) {
     if (!block.grouped) {
       plain.push(...block.rows);
       continue;

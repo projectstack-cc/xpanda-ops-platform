@@ -3513,10 +3513,24 @@ function renderTrailerGroupSection(job) {
     setTrailerGroupLinkBtn('jobs.addToTrailerGroup', members.length >= MAX_TRAILER_GROUP_JOBS);
     const others = members.filter(m => m.id !== job.id);
     if (others.length === 0) { membersWrap.innerHTML = ''; return; }
+    // stops-03: read-only stops (set on the v2 board). Members arrive in stop order (unset last).
+    const self = members.find(m => m.id === job.id);
     membersWrap.innerHTML = others.map(m =>
-      `<span class="jobs-combo-badge" title="${esc(m.customer || '')}">🚛 ${esc(m.invoice_number || m.customer || t('jobs.untitledJob'))}</span>`
-    ).join('');
+      `<span class="jobs-combo-badge" title="${esc(m.customer || '')}">🚛 ${esc(m.invoice_number || m.customer || t('jobs.untitledJob'))}${m.trailer_stop ? ' · ' + esc(stopText(m.trailer_stop)) : ''}</span>`
+    ).join('') +
+      `<div style="flex-basis:100%;font-size:12px;color:var(--muted);margin-top:4px;">` +
+      (self && self.trailer_stop ? `${esc(t('jobs.thisOrderStop', { stop: stopText(self.trailer_stop) }))} · ` : '') +
+      `${esc(t('jobs.setStopsOnV2'))}</div>`;
   }).catch(() => { membersWrap.innerHTML = ''; });
+}
+
+// stops-03: "2nd Stop" / "2.ª parada" / "2yèm arè" — the ordinal pieces are passed as vars and each
+// language's jobs.stopNth string uses the ones it needs (mirrors lib/trailerStops.ts stopLabel for en).
+function stopText(n) {
+  const mod100 = n % 100, mod10 = n % 10;
+  let sfx = 'th';
+  if (mod100 < 11 || mod100 > 13) sfx = mod10 === 1 ? 'st' : mod10 === 2 ? 'nd' : mod10 === 3 ? 'rd' : 'th';
+  return t('jobs.stopNth', { n, sfx, ye: n === 1 ? 'ye' : 'yèm' });
 }
 
 async function openTrailerGroupPicker() {

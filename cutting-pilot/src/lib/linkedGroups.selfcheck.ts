@@ -2,7 +2,7 @@
 // Guarded dev self-check for linkedGroups.ts (carrier-06) — the regression guard for the schedule
 // board's linked-jobs rail after its helpers moved out of DayColumn.tsx. Mirrors
 // productionSchedule.selfcheck.ts's shape. Not part of the production build path.
-import { buildBlocks, countLocalGroups, groupRows, withGroupsAdjacent, type RowBlock } from "./linkedGroups";
+import { buildBlocks, byTrailerStop, countLocalGroups, groupRows, withGroupsAdjacent, type RowBlock } from "./linkedGroups";
 
 interface CheckResult {
   name: string;
@@ -77,6 +77,24 @@ export function runLinkedGroupsSelfCheck(): { pass: boolean; results: CheckResul
     shape(groupRows([r("a", "G1"), r("p", "G2"), r("b", "G1"), r("q", "G2"), r("c", "G1"), r("s", "G2"), r("d", "G1")])),
     ["[g:a,b,c,d]", "[g:p,q,s]"]
   );
+
+  // 11. stops-03: opt-in byTrailerStop orders a group's members by stop; default order unchanged.
+  {
+    const s = (id: string, g: string | null, stop: number | null) => ({ id, trailer_group_id: g, trailer_stop: stop });
+    const ids = (blocks: RowBlock<ReturnType<typeof s>>[]) =>
+      blocks.map((b) => (b.grouped ? `[g:${b.rows.map((x) => x.id).join(",")}]` : b.rows.map((x) => x.id).join(",")));
+    const outOfOrder = [s("c", "G1", 3), s("x", null, null), s("a", "G1", 1), s("b", "G1", 2)];
+    eq("stops: 3-stop group out of order sorts to 1,2,3", ids(groupRows(outOfOrder, byTrailerStop)), ["[g:a,b,c]", "x"]);
+    const partly = [s("u", "G1", null), s("t", "G1", 3), s("v", "G1", null), s("f", "G1", 1)];
+    eq("stops: partly unset → unset last, original order among unset", ids(groupRows(partly, byTrailerStop)), ["[g:f,t,u,v]"]);
+    eq("stops: no comparator → existing order unchanged", ids(groupRows(outOfOrder)), ["[g:c,a,b]", "x"]);
+    eq(
+      "stops: withGroupsAdjacent default call unchanged",
+      withGroupsAdjacent(outOfOrder, countLocalGroups(outOfOrder)).map((x) => x.id),
+      ["c", "a", "b", "x"]
+    );
+    eq("stops: ungrouped rows never reordered", ids(groupRows([s("z", null, 2), s("y", null, 1)], byTrailerStop)), ["z", "y"]);
+  }
 
   return { pass: results.every((x) => x.pass), results };
 }

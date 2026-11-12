@@ -16,6 +16,7 @@ import { useCarrierFetch } from "./useCarrierFetch";
 import CarrierErrorBox from "./CarrierErrorBox";
 import CarrierSchedule from "./CarrierSchedule";
 import LinkedGroupList, { LinkedOrphanChip } from "./LinkedGroup";
+import StopChip from "@/components/StopChip";
 import CarrierCompactRow, { suggestedPickupLabel } from "./CarrierCompactRow";
 
 // Leaflet touches `window` at import — client-only.
@@ -41,6 +42,7 @@ interface CarrierRow {
   delivered_at: string | null;
   delivery_time: string | null;
   trailer_group_id: string | null;
+  trailer_stop?: number | null; // stops-03
   address: string | null;
   miles: number | null;
   duration_sec: number | null;
@@ -175,6 +177,7 @@ function LoadRow({
               INV# {row.invoice_number || "—"}
               {row.suffix}
             </span>
+            <StopChip stop={row.trailer_stop} />
             {orphan && <LinkedOrphanChip />}
           </div>
           <div className="text-sm text-[var(--text-muted)] truncate mt-0.5">

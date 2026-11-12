@@ -8,7 +8,7 @@
 //   - exactly 1 member in this list (rest on another day) → no rail; the row gets LinkedOrphanChip.
 import { Fragment, type ReactNode } from "react";
 import { Link2 } from "lucide-react";
-import { groupRows, type GroupKeyed } from "@/lib/linkedGroups";
+import { byTrailerStop, groupRows, type GroupKeyed } from "@/lib/linkedGroups";
 
 export interface LinkedRenderCtx {
   /** Rendered inside a group rail — drop the row's own outer border. */
@@ -40,7 +40,8 @@ export default function LinkedGroupList<T extends GroupKeyed>({
   keyOf: (row: T, index: number) => string;
   renderRow: (row: T, ctx: LinkedRenderCtx) => ReactNode;
 }) {
-  const blocks = groupRows(rows);
+  // stops-03: members of a linked block list in stop order (unset last).
+  const blocks = groupRows(rows, byTrailerStop);
   return (
     <>
       {blocks.map((block, bi) =>

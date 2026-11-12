@@ -183,6 +183,7 @@ const SELECT_SQL = `SELECT
          j.ship_to_city,
          j.delivery_time,
          j.trailer_group_id,
+         j.trailer_stop,
          j.ship_to_street,
          j.ship_to_street2,
          j.ship_to_zip,
@@ -280,6 +281,7 @@ export async function fetchCarrierRows(DB: D1Database, view: CarrierView) {
       delivered_at: r.delivered_at ?? null,
       delivery_time: r.delivery_time ?? null,
       trailer_group_id: (r.trailer_group_id ?? null) as string | null,
+      trailer_stop: (r.trailer_stop ?? null) as number | null, // stops-03
       address: singleLineAddress(r),
       miles: ok ? g!.info!.miles : null,
       duration_sec: ok ? g!.info!.duration_sec : null,

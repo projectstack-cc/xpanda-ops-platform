@@ -13,6 +13,7 @@ import CarrierStatusPill from "./CarrierStatusPill";
 import { useCarrierFetch } from "./useCarrierFetch";
 import CarrierErrorBox from "./CarrierErrorBox";
 import LinkedGroupList, { LinkedOrphanChip } from "./LinkedGroup";
+import StopChip from "@/components/StopChip";
 import { formatEtClock } from "@/lib/etDateTime";
 import { Check, MapPin } from "lucide-react";
 
@@ -28,6 +29,7 @@ interface ScheduleOrder {
   scrap_pickup: boolean;
   unmatched: boolean;
   trailer_group_id: string | null;
+  trailer_stop?: number | null; // stops-03
 }
 
 interface ScheduleDay {
@@ -115,6 +117,7 @@ function OrderCard({ order, inGroup = false, orphan = false }: OrderRowProps) {
             {order.load_label}
           </span>
         )}
+        <StopChip stop={order.trailer_stop} />
         {orphan && <LinkedOrphanChip />}
       </div>
       {order.scrap_pickup && (
@@ -136,6 +139,7 @@ function ShippedRow({ order, inGroup = false, orphan = false }: OrderRowProps) {
       <span className="shrink-0 tabular-nums font-semibold">{order.delivery_time_label || "—"}</span>
       <span className="shrink-0 text-xs tabular-nums text-[var(--text-muted)]">INV# {order.invoice_number}</span>
       <span className="min-w-0 flex-1 truncate">{order.customer || "—"}</span>
+      <StopChip stop={order.trailer_stop} />
       {orphan && <LinkedOrphanChip />}
     </div>
   );

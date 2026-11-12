@@ -9,6 +9,18 @@
 
 export interface GroupKeyed {
   trailer_group_id?: string | null;
+  /** stops-03: stop within the group, used only by the opt-in byTrailerStop comparator. */
+  trailer_stop?: number | null;
+}
+
+export type MemberCompare<T> = (a: T, b: T) => number;
+
+/** stops-03: order a group's members by stop (1, 2, 3…), unset last. Ties keep their order
+ * (Array.prototype.sort is stable). Opt-in: the schedule board (DayColumn) keeps sheet order. */
+export function byTrailerStop<T extends GroupKeyed>(a: T, b: T): number {
+  const sa = a.trailer_stop || Infinity;
+  const sb = b.trailer_stop || Infinity;
+  return sa === sb ? 0 : sa < sb ? -1 : 1;
 }
 
 // Only a trailer_group_id with >=2 rows PRESENT IN THIS COLUMN counts as a local group. A count of
@@ -24,8 +36,13 @@ export function countLocalGroups<T extends GroupKeyed>(rows: T[]): Map<string, n
 }
 
 // Pulls each local group's rows adjacent, anchored at its first member. No-op when the sheet
-// already stacks them (the common case).
-export function withGroupsAdjacent<T extends GroupKeyed>(rows: T[], localCount: Map<string, number>): T[] {
+// already stacks them (the common case). stops-03: an optional memberCompare re-orders each group's
+// members (stable); omitted → the existing order, unchanged.
+export function withGroupsAdjacent<T extends GroupKeyed>(
+  rows: T[],
+  localCount: Map<string, number>,
+  memberCompare?: MemberCompare<T>
+): T[] {
   const out: T[] = [];
   const consumed = new Set<number>();
   const started = new Set<string>();
@@ -35,12 +52,14 @@ export function withGroupsAdjacent<T extends GroupKeyed>(rows: T[], localCount: 
     const gid = rows[i].trailer_group_id;
     if (gid && (localCount.get(gid) ?? 0) >= 2 && !started.has(gid)) {
       started.add(gid);
+      const members: T[] = [];
       for (let j = i; j < rows.length; j++) {
         if (!consumed.has(j) && rows[j].trailer_group_id === gid) {
-          out.push(rows[j]);
+          members.push(rows[j]);
           consumed.add(j);
         }
       }
+      out.push(...(memberCompare ? [...members].sort(memberCompare) : members));
     } else {
       out.push(rows[i]);
       consumed.add(i);
@@ -76,8 +95,9 @@ export function buildBlocks<T extends GroupKeyed>(rows: T[], localCount: Map<str
   return blocks;
 }
 
-/** The exact sequence DayColumn runs: count → pull adjacent → build blocks. */
-export function groupRows<T extends GroupKeyed>(rows: T[]): RowBlock<T>[] {
+/** The exact sequence DayColumn runs: count → pull adjacent → build blocks. stops-03: memberCompare
+ * (e.g. byTrailerStop) is passed through to withGroupsAdjacent; omitted = unchanged order. */
+export function groupRows<T extends GroupKeyed>(rows: T[], memberCompare?: MemberCompare<T>): RowBlock<T>[] {
   const localCount = countLocalGroups(rows);
-  return buildBlocks(withGroupsAdjacent(rows, localCount), localCount);
+  return buildBlocks(withGroupsAdjacent(rows, localCount, memberCompare), localCount);
 }

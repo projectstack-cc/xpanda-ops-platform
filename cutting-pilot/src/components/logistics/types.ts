@@ -74,6 +74,8 @@ export interface ShipmentListItem {
   entry_key?: string;
   /** split-days-01: jobs.trailer_group_id (linked orders on one trailer). */
   trailer_group_id?: string | null;
+  /** stops-03: jobs.trailer_stop (stop within the trailer group); null = unset. */
+  trailer_stop?: number | null;
 }
 
 // Response shape of GET /v2/api/shipments/:id -- backs ShipmentDetailPanel's inline row

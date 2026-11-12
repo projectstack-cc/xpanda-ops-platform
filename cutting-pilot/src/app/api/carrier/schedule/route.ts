@@ -66,11 +66,11 @@ function addUtcDaysStr(date: Date, days: number): string {
 }
 
 async function fetchJobPlaces(DB: any, jobIds: string[]) {
-  const out = new Map<string, { ship_to_city: string | null; ship_to_state: string | null; trailer_group_id: string | null }>();
+  const out = new Map<string, { ship_to_city: string | null; ship_to_state: string | null; trailer_group_id: string | null; trailer_stop: number | null }>();
   for (let i = 0; i < jobIds.length; i += JOB_CHUNK) {
     const chunk = jobIds.slice(i, i + JOB_CHUNK);
     const { results } = await DB.prepare(
-      `SELECT id, ship_to_city, ship_to_state, trailer_group_id FROM jobs WHERE id IN (${chunk.map(() => "?").join(",")})`
+      `SELECT id, ship_to_city, ship_to_state, trailer_group_id, trailer_stop FROM jobs WHERE id IN (${chunk.map(() => "?").join(",")})`
     )
       .bind(...chunk)
       .all();
@@ -79,6 +79,7 @@ async function fetchJobPlaces(DB: any, jobIds: string[]) {
         ship_to_city: r.ship_to_city ?? null,
         ship_to_state: r.ship_to_state ?? null,
         trailer_group_id: r.trailer_group_id ?? null,
+        trailer_stop: r.trailer_stop ?? null, // stops-03
       });
     }
   }
@@ -137,6 +138,7 @@ export async function GET() {
         scrap_pickup: boolean;
         unmatched: boolean;
         trailer_group_id: string | null;
+        trailer_stop: number | null;
       }>,
     }));
 
@@ -164,6 +166,7 @@ export async function GET() {
         scrap_pickup: (r.scrap_pickup ?? "").trim().toUpperCase().startsWith("Y"),
         unmatched: !jobId,
         trailer_group_id: place?.trailer_group_id ?? null,
+        trailer_stop: place?.trailer_stop ?? null,
       });
     }
 

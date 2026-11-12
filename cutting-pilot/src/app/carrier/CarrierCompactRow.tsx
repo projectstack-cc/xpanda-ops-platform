@@ -17,6 +17,7 @@ import { formatClockMinutes, formatEtClock, weekdayShort } from "@/lib/etDateTim
 import { formatUsdCents } from "@/lib/money";
 import CarrierStatusPill from "./CarrierStatusPill";
 import { LinkedOrphanChip } from "./LinkedGroup";
+import StopChip from "@/components/StopChip";
 
 /** The subset of a carrier load row the compact line reads. */
 export interface CompactRowData {
@@ -37,6 +38,7 @@ export interface CompactRowData {
   delivered_at: string | null;
   has_signed_digital: boolean;
   has_signed_photo: boolean;
+  trailer_stop?: number | null; // stops-03
 }
 
 export type CompactRowVariant = "upcoming" | "history";
@@ -142,6 +144,7 @@ export default function CarrierCompactRow({
             <span className="truncate" title={row.customer || undefined}>
               {row.customer || "—"}
             </span>
+            <StopChip stop={row.trailer_stop} />
             {orphan && <LinkedOrphanChip />}
           </span>
           <span className="truncate text-[var(--text-muted)]" title={cityState}>
@@ -181,6 +184,7 @@ export default function CarrierCompactRow({
               Bay {row.bay_number ?? "—"} / Trl {row.trailer_number || "—"}
             </span>
             {history && <DocsIndicator row={row} />}
+            <StopChip stop={row.trailer_stop} />
             {orphan && <LinkedOrphanChip />}
           </span>
         </span>

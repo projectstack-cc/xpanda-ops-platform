@@ -212,6 +212,9 @@
       trailerGroupHint: "Link this job to another job shipping on the same trailer (same ship date required, up to 4 jobs). They'll appear as a linked set on the schedule board.",
       linkTrailerGroup: "Link to Another Job",
       addToTrailerGroup: "Add Another Stop",
+      stopNth: "{n}{sfx} Stop",
+      thisOrderStop: "This order: {stop}",
+      setStopsOnV2: "Set the stop order on the v2 Job Board (/v2/board → Edit).",
       unlinkTrailerGroup: "Unlink from Trailer Group",
       loadingGroup: "Loading group…",
 
@@ -554,6 +557,9 @@
       trailerGroupHint: "Vincule este trabajo a otro trabajo que se envíe en el mismo remolque (se requiere la misma fecha de envío, hasta 4 trabajos). Aparecerán como un conjunto vinculado en el tablero.",
       linkTrailerGroup: "Vincular a Otro Trabajo",
       addToTrailerGroup: "Agregar Otra Parada",
+      stopNth: "{n}.ª parada",
+      thisOrderStop: "Este pedido: {stop}",
+      setStopsOnV2: "El orden de paradas se define en el tablero v2 (/v2/board → Editar).",
       unlinkTrailerGroup: "Desvincular del Grupo de Remolque",
       loadingGroup: "Cargando grupo…",
 
@@ -896,6 +902,9 @@
       trailerGroupHint: "Lye travay sa a ak yon lòt travay k ap ekspedye sou menm kamyon remòk la (menm dat ekspedisyon obligatwa, jiska 4 travay). Yo va parèt kòm yon gwoup lye sou tablo orè a.",
       linkTrailerGroup: "Lye ak Yon Lòt Travay",
       addToTrailerGroup: "Ajoute Yon Lòt Arè",
+      stopNth: "{n}{ye} arè",
+      thisOrderStop: "Kòmand sa a: {stop}",
+      setStopsOnV2: "Mete lòd arè yo sou tablo v2 la (/v2/board → Edit).",
       unlinkTrailerGroup: "Delye nan Gwoup Kamyon Remòk",
       loadingGroup: "N ap chaje gwoup…",
 
