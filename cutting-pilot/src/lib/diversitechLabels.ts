@@ -28,7 +28,7 @@ export interface DiversiTechJob {
 }
 
 const DIVERSITECH_LOGO_URL = "/logo/xpanda-panda-600.png";
-const DIVERSITECH_BATCH = "42E36164Z";
+const DIVERSITECH_BATCH = "40F26267N";
 const DIVERSITECH_HEADER = "DiversiTech Corporation";
 const DIVERSITECH_BUNDLE_SIZE = 5;
 

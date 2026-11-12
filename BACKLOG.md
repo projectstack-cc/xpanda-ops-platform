@@ -652,7 +652,7 @@
 - [ ] Create packet feature with Bill of Materials (BOM)
 - [ ] Recurring jobs / job templates — "duplicate as template" or "create from previous" for repeat customers (e.g. DiversiTech, All Florida Weatherproofing)
 - [ ] Label printing — UL labels (DiversiTech labels shipped in P421)
-- [ ] P421 follow-up — real BATCH numbers on DiversiTech labels once production batch tracking exists (currently the constant `42E36164Z` placeholder)
+- [ ] P421 follow-up — real BATCH numbers on DiversiTech labels once production batch tracking exists (currently a hard-coded constant, `40F26267N` since dtl-batch-01; changing it means editing both `jobs/diversitech-labels.js` and `cutting-pilot/src/lib/diversitechLabels.ts`)
 - [ ] P421 follow-up — licensed CG Triumvirate Condensed Bold TTF + fontkit embed for DiversiTech labels, to exactly match the Labelife source (currently `StandardFonts.HelveticaBold`)
 - [ ] P421 follow-up — wire DiversiTech label generation into job creation (currently print-on-demand from the job card only)
 
