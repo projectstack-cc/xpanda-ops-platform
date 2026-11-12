@@ -9,16 +9,19 @@ import { useEffect, useRef, useState } from "react";
 import { Package, Truck, X } from "lucide-react";
 import SearchPickerModal, { type SearchPickerItem } from "@/components/SearchPickerModal";
 import { countLocalGroups } from "@/lib/linkedGroups";
-import type { BoardJob } from "./ProductionBoard";
-
 // jb-16: most stops per trailer group. The server is authoritative (409 group_full); boardJobs can
 // undercount a group, so this only decides what the UI offers.
-const MAX_TRAILER_GROUP_JOBS = 4;
+import { MAX_TRAILER_GROUP_JOBS, stopLabel, isStopLocked } from "@/lib/trailerStops";
+import type { BoardJob } from "./ProductionBoard";
 
 interface GroupMember {
   id: string;
   customer: string | null;
   invoice_number: string | null;
+  // stops-01: GET /api/jobs/:id/group returns these, in stop order (unset last).
+  trailer_stop: number | null;
+  status: string | null;
+  archived_at: string | null;
 }
 
 interface Combo {
@@ -194,7 +197,58 @@ export default function OrderLinksSection({
     onChanged();
   }
 
-  const others = members.filter((m) => m.id !== jobId);
+  // ── Stops (stops-01) ──────────────────────────────────────────
+  // Draft stop per member, reset from the server's members on every (re)load. Unset = null (no
+  // auto-fill). The whole group is saved in one PUT so a 1↔2 swap never passes a duplicate.
+  const [stopDraft, setStopDraft] = useState<Record<string, number | null>>({});
+  const [stopsBusy, setStopsBusy] = useState(false);
+  const [stopsError, setStopsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setStopDraft(Object.fromEntries(members.map((m) => [m.id, m.trailer_stop ?? null])));
+    setStopsError(null);
+  }, [members]);
+
+  const stopsDirty = members.some((m) => (stopDraft[m.id] ?? null) !== (m.trailer_stop ?? null));
+  const stopCounts = new Map<number, number>();
+  for (const m of members) {
+    const v = stopDraft[m.id] ?? null;
+    if (v != null) stopCounts.set(v, (stopCounts.get(v) ?? 0) + 1);
+  }
+  const clashes = (id: string) => {
+    const v = stopDraft[id] ?? null;
+    return v != null && (stopCounts.get(v) ?? 0) > 1;
+  };
+  const hasClash = members.some((m) => clashes(m.id));
+  // Options run 1..N; a saved stop above N (left behind by an unlink) stays visible so it can be changed.
+  const stopOptionCount = Math.max(members.length, ...members.map((m) => m.trailer_stop ?? 0));
+
+  async function saveStops() {
+    if (!trailerGroupId) return;
+    setStopsBusy(true);
+    setStopsError(null);
+    try {
+      const res = await fetch("/v2/api/board/trailer-stops", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          group_id: trailerGroupId,
+          stops: Object.fromEntries(members.map((m) => [m.id, stopDraft[m.id] ?? null])),
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.ok) {
+        setStopsError(data?.error || "Couldn't save the stops.");
+        return;
+      }
+      setMembersVersion((v) => v + 1);
+      onChanged();
+    } catch {
+      setStopsError("Network error — couldn't reach the server.");
+    } finally {
+      setStopsBusy(false);
+    }
+  }
 
   return (
     <section className="space-y-3">
@@ -204,14 +258,72 @@ export default function OrderLinksSection({
       <div className="space-y-2">
         <div className="text-xs font-semibold text-muted">Trailer group</div>
         {trailerGroupId ? (
+          <div className="space-y-2">
+          {membersLoading && <span className="text-xs text-muted">Loading group…</span>}
+          {!membersLoading && members.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="text-xs font-semibold text-muted">Stops</div>
+              <ul className="space-y-1.5">
+                {members.map((m) => {
+                  const locked = !canEdit || isStopLocked(m);
+                  const lockedWhy = !canEdit
+                    ? "You can view stops but not change them."
+                    : "This order is shipped or archived, so its stop can't change.";
+                  const value = stopDraft[m.id] ?? null;
+                  const isSelf = m.id === jobId;
+                  return (
+                    <li key={m.id} className="flex items-center gap-2 min-w-0">
+                      <Truck size={14} aria-hidden="true" className="shrink-0 text-muted" />
+                      <span className="font-mono tabular-nums text-sm text-text shrink-0">
+                        {m.invoice_number || "—"}
+                      </span>
+                      <span className="text-xs text-muted truncate min-w-0 flex-1" title={m.customer || ""}>
+                        {isSelf ? "This order" : (m.customer || "Untitled")}
+                      </span>
+                      {locked ? (
+                        <span className="min-h-[44px] inline-flex items-center px-2 text-sm text-text shrink-0" title={lockedWhy}>
+                          {value != null ? stopLabel(value) : "—"}
+                        </span>
+                      ) : (
+                        <select
+                          aria-label={`Stop for ${m.invoice_number || m.customer || "order"}`}
+                          value={value == null ? "" : String(value)}
+                          onChange={(e) => {
+                            const v = e.target.value ? Number(e.target.value) : null;
+                            setStopDraft((d) => ({ ...d, [m.id]: v }));
+                          }}
+                          disabled={stopsBusy}
+                          className={`min-h-[44px] shrink-0 rounded-md border bg-[var(--input-bg)] text-text text-sm px-2 ${
+                            clashes(m.id) ? "border-2 border-[var(--danger-ink)]" : "border-[var(--input-border)]"
+                          }`}
+                        >
+                          <option value="">—</option>
+                          {Array.from({ length: stopOptionCount }, (_, i) => i + 1)
+                            .filter((n) => n <= members.length || n === m.trailer_stop)
+                            .map((n) => (
+                              <option key={n} value={String(n)}>{stopLabel(n)}</option>
+                            ))}
+                        </select>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+              {hasClash && <p className="text-sm text-[var(--danger-ink)]">Two orders can&apos;t be the same stop.</p>}
+              {stopsError && <p className="text-sm text-[var(--warn-text)]">{stopsError}</p>}
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={saveStops}
+                  disabled={!stopsDirty || hasClash || stopsBusy}
+                  className="min-h-[44px] px-4 rounded-md bg-[var(--brand)] text-white text-sm font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {stopsBusy ? "Saving…" : "Save stops"}
+                </button>
+              )}
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-2">
-            {membersLoading && <span className="text-xs text-muted">Loading group…</span>}
-            {!membersLoading && others.map((m) => (
-              <span key={m.id} className={chipClass} title={m.customer || ""}>
-                <Truck size={14} aria-hidden="true" />
-                <span className="font-mono tabular-nums">{m.invoice_number || m.customer || "Untitled"}</span>
-              </span>
-            ))}
             {canEdit && !groupFull && (
               <button type="button" onClick={() => { setGroupError(null); setGroupPickerOpen(true); }} disabled={!!groupBusy} className={ghostBtn}>
                 {groupBusy === "link" ? "Linking…" : "Add Another Stop"}
@@ -227,6 +339,7 @@ export default function OrderLinksSection({
                 {MAX_TRAILER_GROUP_JOBS} of {MAX_TRAILER_GROUP_JOBS} stops — max reached
               </span>
             )}
+          </div>
           </div>
         ) : canEdit ? (
           <button type="button" onClick={() => { setGroupError(null); setGroupPickerOpen(true); }} disabled={!!groupBusy} className={ghostBtn}>

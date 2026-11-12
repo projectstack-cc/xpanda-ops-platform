@@ -139,6 +139,10 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
       s("notes"), s("po_number"), render_overrides, access_token,
       bolId
     ).run();
+    // stops-01: the PUT rewrites job_id, so re-copy that job's trailer stop (keeps the invariant).
+    await DB.prepare(
+      "UPDATE bols SET trailer_stop = (SELECT trailer_stop FROM jobs WHERE jobs.id = bols.job_id) WHERE id = ?"
+    ).bind(bolId).run();
 
     const row = await DB.prepare("SELECT * FROM bols WHERE id = ?").bind(bolId).first();
 

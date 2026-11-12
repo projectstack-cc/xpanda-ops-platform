@@ -190,6 +190,11 @@ export async function POST(request: NextRequest) {
       lm ? JSON.stringify(lm) : null,
       now
     ).run();
+    // stops-01: a new BOL copies its job's trailer stop (job-less BOL → NULL). Invariant:
+    // bols.trailer_stop always equals jobs.trailer_stop. Mirrors legacy POST /api/bols.
+    await DB.prepare(
+      "UPDATE bols SET trailer_stop = (SELECT trailer_stop FROM jobs WHERE jobs.id = bols.job_id) WHERE id = ?"
+    ).bind(id).run();
 
     const row = await DB.prepare("SELECT * FROM bols WHERE id = ?").bind(id).first();
 

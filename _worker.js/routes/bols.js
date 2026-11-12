@@ -491,6 +491,11 @@ export async function handleApiBols(request, env) {
         loadManifest,
         now
       ).run();
+      // stops-01: a new BOL copies its job's trailer stop (job-less BOL → NULL). Invariant:
+      // bols.trailer_stop always equals jobs.trailer_stop. Mirrors v2 POST /v2/api/bols.
+      await db.prepare(
+        "UPDATE bols SET trailer_stop = (SELECT trailer_stop FROM jobs WHERE jobs.id = bols.job_id) WHERE id = ?"
+      ).bind(id).run();
 
       const row = await db.prepare("SELECT * FROM bols WHERE id = ?").bind(id).first();
       await logActivity(db, 'create', 'bol', id,
@@ -601,6 +606,10 @@ export async function handleApiBols(request, env) {
         s("notes"), s("po_number"), render_overrides, access_token,
         bolId
       ).run();
+      // stops-01: the PUT rewrites job_id, so re-copy that job's trailer stop (keeps the invariant).
+      await db.prepare(
+        "UPDATE bols SET trailer_stop = (SELECT trailer_stop FROM jobs WHERE jobs.id = bols.job_id) WHERE id = ?"
+      ).bind(bolId).run();
 
       const row = await db.prepare("SELECT * FROM bols WHERE id = ?").bind(bolId).first();
       await logActivity(db, 'update', 'bol', bolId,

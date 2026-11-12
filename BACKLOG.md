@@ -619,6 +619,10 @@
 
 ## Job Board
 
+- [ ] **stops-02 — print the trailer stop** on the BOL Time box (paired `bolShared.ts` + `bol-shared.js`) and the loading sheet (stop band + Packing Instructions block). Prompt: `Prompts/stops-02.md`.
+- [ ] **stops-03 — StopChip display** on Carrier View, v2 logistics, v2 Job Board rows (members sorted by stop) + Classic read-only. Prompt: `Prompts/stops-03.md`.
+- [ ] **Load Builder could pack a trailer group by stop order** (last stop loads first, at the wall). Scope only if Steve asks. (from stops-01)
+
 - **Legacy `.btn` elements ignore the `hidden` attribute (found jb-16).** `.btn { display: inline-flex }` in `shared/components.css` beats it, so anything shown/hidden that way stays visible. Still affected on Classic: `#modal-delete` (Delete Job) and `#btn-edit-zones` (`jobs/index.html`); other legacy pages importing `components.css` weren't checked for `.hidden` toggles. jb-16 fixed only the two trailer-group buttons, in `jobs-shared.css`. Likely one line, `.btn[hidden] { display: none; }`, but it changes what users see across every legacy module, so check which buttons disappear first.
 > Items mentioning the job form/job card target v2 (`/v2/orders` entry, `/v2/board`) going forward; the legacy board is in testing only.
 

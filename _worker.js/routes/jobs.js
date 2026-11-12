@@ -91,7 +91,7 @@ export async function handleApiJobs(request, env) {
 
   // Columns returned in list responses — packing_slip_pdf is intentionally excluded (too large)
   const JOB_LIST_COLS = `
-    j.id, j.status, j.archived_at, j.trailer_group_id, j.customer, j.po_number, j.invoice_number, j.ship_date, j.ship_day,
+    j.id, j.status, j.archived_at, j.trailer_group_id, j.trailer_stop, j.customer, j.po_number, j.invoice_number, j.ship_date, j.ship_day,
     j.location, j.delivery_time, j.method, j.carrier, j.load_count, j.total_bdft,
     j.scrap_pickup, j.sales_lead, j.bol_info, j.payment_info, j.notes,
     j.cutting_instructions, j.packing_instructions, j.contact_name, j.contact_phone, j.combo_id,
@@ -167,7 +167,8 @@ export async function handleApiJobs(request, env) {
       if (!job.trailer_group_id) return json({ ok: true, group_id: null, members: [] });
 
       const result = await db.prepare(
-        "SELECT id, customer, invoice_number, po_number, ship_date, status FROM jobs WHERE trailer_group_id = ? ORDER BY invoice_number ASC"
+        // stops-01: stop order first (set stops ascending), unset stops last by invoice.
+        "SELECT id, customer, invoice_number, po_number, ship_date, status, trailer_stop, archived_at FROM jobs WHERE trailer_group_id = ? ORDER BY trailer_stop IS NULL, trailer_stop, invoice_number ASC"
       ).bind(job.trailer_group_id).all();
       return json({ ok: true, group_id: job.trailer_group_id, members: result.results || [] });
     } catch (e) {
@@ -853,8 +854,13 @@ export async function handleApiJobs(request, env) {
     //     group_full, jb-16); groups already over the cap are left alone, only adding is blocked.
     // Unlinking clears this job's own value; if that leaves exactly one other job holding the old
     // group id, that job is cleared too in the same batch — a group of one is meaningless.
+    //
+    // stops-01: a stop (jobs.trailer_stop) only means something inside the group it was set in, so
+    // every membership change clears it — on the job, the linked target, and the auto-cleared last
+    // member — and clears the copy on each of those jobs' BOLs (bols.trailer_stop) in the same batch.
     let unlinkedFromGroupId = null;
     let linkTargetUpdate    = null;
+    const clearStopJobIds   = [];
     if ("trailer_group_id" in payload) {
       const raw = payload.trailer_group_id;
       const targetJobId = raw ? String(raw).trim() : null;
@@ -863,6 +869,8 @@ export async function handleApiJobs(request, env) {
         if (existing.trailer_group_id) {
           unlinkedFromGroupId = existing.trailer_group_id;
           sets.push("trailer_group_id = ?"); binds.push(null);
+          sets.push("trailer_stop = NULL");
+          clearStopJobIds.push(id);
         }
         // else: already unlinked — no-op.
       } else {
@@ -908,8 +916,13 @@ export async function handleApiJobs(request, env) {
 
         const resolvedGroupId = target.trailer_group_id || existing.trailer_group_id || targetJobId;
         sets.push("trailer_group_id = ?"); binds.push(resolvedGroupId);
+        if (resolvedGroupId !== existing.trailer_group_id) {
+          sets.push("trailer_stop = NULL");
+          clearStopJobIds.push(id);
+        }
         if (target.trailer_group_id !== resolvedGroupId) {
           linkTargetUpdate = { id: targetJobId, groupId: resolvedGroupId };
+          clearStopJobIds.push(targetJobId);
         }
       }
     }
@@ -995,28 +1008,35 @@ export async function handleApiJobs(request, env) {
       const mainUpdate = db.prepare(`UPDATE jobs SET ${sets.join(", ")} WHERE id = ?`).bind(...binds);
       const nowTG = new Date().toISOString();
 
+      const groupStmts = [mainUpdate];
       if (linkTargetUpdate) {
         // Atomic with the main row: the target job must land on the same resolved group id.
-        await db.batch([
-          mainUpdate,
-          db.prepare("UPDATE jobs SET trailer_group_id = ?, updated_at = ? WHERE id = ?")
-            .bind(linkTargetUpdate.groupId, nowTG, linkTargetUpdate.id),
-        ]);
+        // stops-01: it joins with its stop cleared.
+        groupStmts.push(
+          db.prepare("UPDATE jobs SET trailer_group_id = ?, trailer_stop = NULL, updated_at = ? WHERE id = ?")
+            .bind(linkTargetUpdate.groupId, nowTG, linkTargetUpdate.id)
+        );
       } else if (unlinkedFromGroupId) {
         const remaining = await db.prepare(
           "SELECT id FROM jobs WHERE trailer_group_id = ? AND id != ?"
         ).bind(unlinkedFromGroupId, id).all();
         const remainingRows = remaining.results || [];
         if (remainingRows.length === 1) {
-          // Never leave a group of one — clear the last remaining member atomically too.
-          await db.batch([
-            mainUpdate,
-            db.prepare("UPDATE jobs SET trailer_group_id = NULL, updated_at = ? WHERE id = ?")
-              .bind(nowTG, remainingRows[0].id),
-          ]);
-        } else {
-          await mainUpdate.run();
+          // Never leave a group of one — clear the last remaining member atomically too
+          // (stops-01: its stop clears with its group id).
+          groupStmts.push(
+            db.prepare("UPDATE jobs SET trailer_group_id = NULL, trailer_stop = NULL, updated_at = ? WHERE id = ?")
+              .bind(nowTG, remainingRows[0].id)
+          );
+          clearStopJobIds.push(remainingRows[0].id);
         }
+      }
+      // stops-01: keep bols.trailer_stop equal to its job's — same batch as the jobs writes.
+      for (const jid of clearStopJobIds) {
+        groupStmts.push(db.prepare("UPDATE bols SET trailer_stop = NULL WHERE job_id = ?").bind(jid));
+      }
+      if (groupStmts.length > 1) {
+        await db.batch(groupStmts);
       } else {
         await mainUpdate.run();
       }
@@ -1299,9 +1319,13 @@ export async function handleApiJobs(request, env) {
           ).bind(existing.trailer_group_id).all();
           const survivorRows = survivors.results || [];
           if (survivorRows.length === 1) {
-            await db.prepare(
-              "UPDATE jobs SET trailer_group_id = NULL, updated_at = ? WHERE id = ?"
-            ).bind(new Date().toISOString().replace('T', ' ').slice(0, 19), survivorRows[0].id).run();
+            // stops-01: the survivor leaves the group, so its stop (and its BOLs' copy) clears too.
+            await db.batch([
+              db.prepare(
+                "UPDATE jobs SET trailer_group_id = NULL, trailer_stop = NULL, updated_at = ? WHERE id = ?"
+              ).bind(new Date().toISOString().replace('T', ' ').slice(0, 19), survivorRows[0].id),
+              db.prepare("UPDATE bols SET trailer_stop = NULL WHERE job_id = ?").bind(survivorRows[0].id),
+            ]);
           }
         } catch { /* non-fatal: the job is already deleted */ }
       }
