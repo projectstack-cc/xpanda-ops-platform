@@ -23,9 +23,8 @@
       safetyHome: {
         title: "xPanda Foam Safety Portal",
         subtitle: "SDS access • Safety training • Quick reference",
-        searchHelp: "Search by product or manufacturer name to find Safety Data Sheets.",
-        searchPlaceholder: "Search SDS...",
-        searchTip: "Tip: Try simple terms like “3M”, “Cleaner”, “Oil”, “Primer”.",
+        sdsTitle: "📚 SDS Library",
+        sdsDesc: "Search every Safety Data Sheet by product or manufacturer.",
         browseTitle: "📚 Browse SDS",
         browseDesc: "A–Z by manufacturer with filtering.",
         trainingTitle: "🎥 Safety Training",
@@ -36,11 +35,6 @@
         emergencyTitle: "Emergency:",
         emergencyBody: "If there is immediate danger or a serious injury, call 911.",
         poisonBody: "For chemical exposure guidance, contact Poison Control: 1-800-222-1222."
-      },
-      sds: {
-        back: "← Back to Search",
-        title: "SDS Library (Browse by Manufacturer)",
-        filterPlaceholder: "Filter (manufacturer or product)..."
       },
       train: {
         title: "Safety Training",
@@ -86,9 +80,8 @@
       safetyHome: {
         title: "Portal de Seguridad de xPanda Foam",
         subtitle: "Acceso a SDS • Capacitación • Referencia rápida",
-        searchHelp: "Busque por producto o fabricante para encontrar Hojas de Datos de Seguridad (SDS).",
-        searchPlaceholder: "Buscar SDS...",
-        searchTip: "Consejo: Pruebe términos simples como “3M”, “Cleaner”, “Oil”, “Primer”.",
+        sdsTitle: "📚 Biblioteca de SDS",
+        sdsDesc: "Busque cualquier Hoja de Datos de Seguridad por producto o fabricante.",
         browseTitle: "📚 Explorar SDS",
         browseDesc: "A–Z por fabricante con filtro.",
         trainingTitle: "🎥 Capacitación de Seguridad",
@@ -99,11 +92,6 @@
         emergencyTitle: "Emergencia:",
         emergencyBody: "Si hay peligro inmediato o una lesión grave, llame al 911.",
         poisonBody: "Para orientación por exposición química, comuníquese con el Centro de Toxicología: 1-800-222-1222."
-      },
-      sds: {
-        back: "← Volver a Buscar",
-        title: "Biblioteca de SDS (Explorar por Fabricante)",
-        filterPlaceholder: "Filtrar (fabricante o producto)..."
       },
       train: {
         title: "Capacitación de Seguridad",
@@ -147,9 +135,8 @@
       safetyHome: {
         title: "Pòtal Sekirite xPanda Foam",
         subtitle: "Aksè SDS • Fòmasyon Sekirite • Referans rapid",
-        searchHelp: "Chèche pa non pwodwi oswa manifakti pou jwenn Fèy Done Sekirite (SDS).",
-        searchPlaceholder: "Chèche SDS...",
-        searchTip: "Konsèy: Eseye tèm senp tankou “3M”, “Cleaner”, “Oil”, “Primer”.",
+        sdsTitle: "📚 Bibliyotèk SDS",
+        sdsDesc: "Chèche nenpòt Fèy Done Sekirite pa pwodwi oswa manifakti.",
         browseTitle: "📚 Gade SDS A–Z",
         browseDesc: "A–Z pa manifakti avèk filtè.",
         trainingTitle: "🎥 Fòmasyon Sekirite",
@@ -160,11 +147,6 @@
         emergencyTitle: "Ijans:",
         emergencyBody: "Si gen danje imedyat oswa yon blesi grav, rele 911.",
         poisonBody: "Pou gid sou ekspozisyon chimik, kontakte Poison Control: 1-800-222-1222."
-      },
-      sds: {
-        back: "← Retounen nan Rechèch",
-        title: "Bibliyotèk SDS (Gade pa Manifakti)",
-        filterPlaceholder: "Filtre (manifakti oswa pwodwi)..."
       },
       train: {
         title: "Fòmasyon Sekirite",
@@ -209,7 +191,6 @@
   } else {
     window.I18n.register("common", { en: translations.en.common, es: translations.es.common, ht: translations.ht.common });
     window.I18n.register("safetyHome", { en: translations.en.safetyHome, es: translations.es.safetyHome, ht: translations.ht.safetyHome });
-    window.I18n.register("sds", { en: translations.en.sds, es: translations.es.sds, ht: translations.ht.sds });
     window.I18n.register("train", { en: translations.en.train, es: translations.es.train, ht: translations.ht.train });
   }
 

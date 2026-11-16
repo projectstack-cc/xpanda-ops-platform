@@ -91,11 +91,6 @@
       margin-bottom: 14px;
     }
 
-    .search-card {
-      border: 2px solid #0074cc;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.06);
-    }
-
     .actions {
       display: grid;
       grid-template-columns: 1fr;
@@ -129,30 +124,6 @@
       margin: 0;
       color: #555;
       font-size: 13px;
-    }
-
-    #search {
-      width: 100%;
-      padding: 14px;
-      font-size: 17px;
-      margin-bottom: 10px;
-      border: 2px solid #ccc;
-      border-radius: 8px;
-    }
-
-    #search:focus {
-      outline: none;
-      border-color: #0074cc;
-    }
-
-    ul { list-style: none; padding: 0; margin: 0; }
-
-    li {
-      margin-bottom: 8px;
-      background: white;
-      padding: 10px;
-      border-radius: 6px;
-      border: 1px solid #ddd;
     }
 
     a { text-decoration: none; color: #0074cc; font-weight: bold; }
@@ -214,24 +185,19 @@
   </div>
 </header>
 
-<!-- SEARCH FIRST -->
-<div id="searchCard" class="card search-card">
-  <p class="sub" style="margin-top:0;" data-i18n="safetyHome.searchHelp">
-    Search by product or manufacturer name to find Safety Data Sheets.
+<!-- SDS LIBRARY FIRST (sds-02: the SDS library is the standalone xpanda-sds site; same tab for tablets/kiosks) -->
+<div class="card">
+  <p class="sub" style="margin-top:0;" data-i18n="safetyHome.sdsDesc">
+    Search every Safety Data Sheet by product or manufacturer.
   </p>
-
-  <input type="text" id="search" data-i18n-placeholder="safetyHome.searchPlaceholder" placeholder="Search SDS...">
-
-  <ul id="results"></ul>
-
-  <div class="fineprint" data-i18n="safetyHome.searchTip">
-    Tip: Try simple terms like “3M”, “Cleaner”, “Oil”, “Primer”.
-  </div>
+  <a class="action-btn" href="https://xpanda-sds.pages.dev/">
+    <div class="action-title" data-i18n="safetyHome.sdsTitle">📚 SDS Library</div>
+  </a>
 </div>
 
 <!-- BUTTONS SECOND -->
 <div class="actions">
-  <a class="action-btn" href="sds.html">
+  <a class="action-btn" href="https://xpanda-sds.pages.dev/sds.html">
     <div class="action-title" data-i18n="safetyHome.browseTitle">📚 Browse SDS</div>
     <p class="action-desc" data-i18n="safetyHome.browseDesc">A–Z by manufacturer with filtering.</p>
   </a>
@@ -272,9 +238,6 @@
   // Initialize shared language system for this page
   window.xPandaI18n && window.xPandaI18n.initLanguageSelector({ selectorId: "xpandaLang" });
 </script>
-
-<!-- Existing logic (unchanged) -->
-<script src="search.js"></script>
 
 </body>
 </html>

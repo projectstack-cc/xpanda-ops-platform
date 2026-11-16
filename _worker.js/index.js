@@ -106,6 +106,12 @@ export default {
         return Response.redirect(`${url.origin}/safety/training/`, 301);
       }
 
+      // sds-02: the SDS library lives in the standalone xpanda-sds project. Old platform PDF links
+      // forward there; xpanda-sds 301s /safety/pdfs/* to each PDF's current home (sds-01).
+      if (url.pathname.startsWith("/safety/pdfs/")) {
+        return Response.redirect(`https://xpanda-sds.pages.dev${url.pathname}`, 301);
+      }
+
       // 1) Health check
       if (url.pathname === "/health") {
         return new Response("FUNCTIONS_OK", { status: 200 });

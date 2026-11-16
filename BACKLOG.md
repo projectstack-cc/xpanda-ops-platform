@@ -154,14 +154,13 @@
 
 ### Safety · NO v2 YET — scope separately (large)
 
-- [ ] **sds-02** — platform safety/ SDS pages link out to https://xpanda-sds.pages.dev/ (home card, safety/index
-  search + Browse) and delete the duplicate safety/pdfs/ + search.js/browse.js/sds.html. xpanda-sds is the single
-  source of truth for SDS PDFs.
+- [ ] Delete the `safety/sds.html` stub and the `/safety/pdfs/*` worker redirect once access logs show no hits.
+- [ ] `safety/index.html` header overflows a 390px phone by 9px (logo + language row don't wrap; the header's
+  `flex:1` column needs `min-width:0`). Pre-existing, unchanged by sds-02; found in its Playwright check.
 - [ ] Safety v2 scope is now **training only** (blocks 01–09 + admin, completion ↔ users, i18n). SDS is out of
   scope: it stays standalone and public (HazCom: no login barrier).
 - [ ] Optional: add sds.xpandaops.com as a custom domain on xpanda-sds. Keep xpanda-sds.pages.dev working forever
   (QR codes).
-- [ ] Platform copy has the Diamond Crystal broken link (trailing space in the PDF filename); moot after sds-02.
 - [ ] Finish caption translation (i18n)
 - [ ] Link user training completion to user records (depends on auth/user system)
 - [ ] **Native-speaker review pass on the Safety i18n catalog** (es/ht) — the SDS/training strings are machine-translated; given liability exposure on a safety portal this should get verified by a native speaker before being treated as authoritative. Non-blocking.
