@@ -342,9 +342,9 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
   const actorId = request.headers.get("X-User-Id") || "";
   if (!actorId) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
 
-  // Admin bypass FIRST, then fall back to the granular permission. /v2/logistics is currently
-  // dark-launched admin-only (middleware.ts:55-59, gated on logistics.v2 which no role holds) --
-  // a perms-only check with no bypass would 403 every real user who can reach this route today.
+  // Admin bypass FIRST, then fall back to the granular permission. Middleware gates
+  // /v2/api/shipments on logistics.dashboard; admins pass every gate, so the bypass stays first --
+  // a perms-only check with no bypass would 403 an admin whose roles don't carry the key.
   if (!canEditDashboard(request)) {
     return NextResponse.json(
       { ok: false, error: "You do not have permission to edit shipments." },

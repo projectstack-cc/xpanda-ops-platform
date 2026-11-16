@@ -50,14 +50,12 @@
 - [ ] **`shipments.trailer_number` is dead for job-linked shipments** (trailer # lives on
   `loading_assignments` since lgx-rows-01). Drop the column once legacy `logistics/index.html` is retired.
 - [ ] **Legacy `logistics/index.html` edit form still shows Method and still can't edit job-owned fields.** Retire with the legacy dashboard rather than patching. (Follow-on from lgx-editmodal-01.)
+- [ ] Classic `logistics/index.html` still fetches `/api/silos` and `/api/bead-types` (both removed in prod-b-04) and shows an empty Silo / Bead Type picker on inbound shipments. Goes away when Classic retires; don't patch.
 
 ### Load Builder — legacy `logistics/load-builder.html` → `/v2/logistics/load-builder` · NEEDS MAJOR WORK (dark)
 
 - [ ] **Edit/move on-edge holey columns in the legacy customize editor + dissolve** (lb-box-02 locked them: not
   draggable, not drop targets, never dissolve receivers; a dense re-pack flattens them).
-- [x] **Dissolve on-edge holey columns in v2** (lb-edge-01 unlocked them in Customize; `dissolve.ts` still never moves
-  them or uses them as receivers). — resolved lb-edge-02: on-edge boards dissolve laid flat, and same-SKU on-edge
-  columns take boards up to their tiers.
 - [ ] **Dissolve measures flat headroom and weight against `state.dims`, not the receiver trailer's own dims**
   (found during lb-edge-02, pre-existing). On an auto-downsized plan (53ft + a 26ft Box Truck), a flat move onto the
   box truck is sized against 109″ / 44,000 lb instead of 108″ / 28,000 lb. `validateForApply` still blocks a bad
@@ -101,17 +99,12 @@
   - [ ] lb-diag-01 follow-up — decide the `EditorGuards.tsx` overflow wording ("…past the rear of the trailer there").
     lb-diag-01 renamed the floor terms to WALL / DOORS but left this message alone. Which end a row overflows from is a
     judgement call.
-  - [x] lbr-05 follow-up — `PlanMetricsStrip.tsx` is no longer imported (Results uses `MetricTile`); delete it. Loading
-    diagram PDF: the "636"L × 98"W — 1' 0" remaining" caption overlaps the STACK BREAKDOWN heading (observed in the lbr-05 smoke render). (resolved lbr-08)
   - [ ] lbr-04 follow-up — legacy Load Builder still writes order loads with a 90-day TTL; moot after lbr-11 cutover.
-  - [ ] lbr-06 follow-up — nothing gates on logistics.v2 any more; drop the key + label (and strip it from roles) in a later admin cleanup.
   - [ ] lbr-rot-01 follow-up — a too-tall-as-entered part that shares its L×W footprint with another SKU joins a 2+
     member family, which only offers flat / flat-rotated (never tips height), so it stays unplaced. Harness: INV 4462,
     4×55×110 (with 4×55×96) — 10 pcs. Fix idea: split envelope-misfit members into their own family.
   - [ ] lbr follow-up — multi-truck loads: topped stacks that spill across a truck boundary open the next truck's nose
     row; consider per-truck top-off placement. (lbr-03 audit: planner-backed v2 frontRowMixed = 36.)
-- [ ] **Load builder v2 (`/v2/logistics/load-builder`) still dark after lgx-roll-01.** Un-dark by deleting its `logistics.v2` middleware line, then repoint Build Load / Load Builder links.
-- [x] **`lb-ui-05` follow-up — `GET /api/load-builder-skus` needs its own permission grant at Phase 3 rollout.** — resolved lbr-06: the v2 page is now gated on the same `logistics.load-builder` key, so anyone who reaches it can call the SKU route. That legacy route is gated by the `logistics.load-builder` key (`_worker.js/lib/core.js:213`); it works today only because `/v2/logistics*` is admin-only and admins bypass permission checks (`middleware.ts`'s dark-launch gate). When Phase 3 grants `logistics.v2` to a non-admin role, that role also needs `logistics.load-builder` (view) or `JobPullModal` dead-ends on "Couldn't load the SKU library." Not currently named in the sprint charter's Phase 3 checklist — add it there when Phase 3 is scoped.
 - [ ] Repoint the v2 links that still open legacy Load Builder once v2 is ready: `components/logistics/BolActions.tsx`
   (`/logistics/load-builder.html?job_id=`), `app/logistics/ShipmentDashboard.tsx`, and the home Logistics card.
 
@@ -131,7 +124,7 @@
 - [ ] BOL Email v2 i18n (es/ht) — English-only in bem-01.
 - [ ] tls-01's `nextShipDay` (to-load sheets) could reuse `lib/logistics/bolEmail.ts`'s holiday-aware `nextShippingDateStr` — plant_holidays now has a v2 owner.
 
-### Manufacturing calculators · NO v2 YET
+### Manufacturing calculators · Block Calculator in progress (blk-01 shipped; blk-02, blk-03 open)
 
 - [ ] Port `manufacturing/block-calculator.html` (general block nesting; `/v2/blocks` covers taper only).
 - [ ] Delete the `manufacturing/holey-board-calculator.html` redirect stub once access logs show no hits (hb-archive-01; original kept in `manufacturing/_archived/`).
@@ -142,20 +135,13 @@
 - [ ] qc follow-up — "Line changed since inspection" only flags; decide whether a changed line should drop back to Not inspected.
 - [ ] qc follow-up — customers not in the FINAL INSPECTION master sheet land in the default Drive folder (drive_customer NULL). Add them to the sheet (Name, Active=YES, Folder ID) to route their PDFs.
 - [ ] qc follow-up — admin bulk inspect (qc-06) skips lines with unreadable dimensions; if that list is long in practice, consider a per-line nominal override in the bulk modal.
-- [x] **Done in ui-44-01 (2026-10-29).** qc-01 follow-up — shared dashboard primitives under 44px touch targets: `WeekSelector` arrows (`w-8 h-8`) and segment buttons (~30px), `SearchInput` / `FilterSelect` (`h-9`). Used by /v2/qc, /v2/logistics and /v2/board — raise in one shared change.
 - [ ] qc-09 follow-up — delete the dead `addCustomer` / `addIncidentCustomer` functions from the Inspection Tool script (unreachable since qc-09 removed their `doGet` dispatch lines).
 - [ ] Incident follow-up — add root cause / corrective actions after the initial report (today: create-only, like legacy; the Doc is the record).
 - [ ] Incident customers not in the incident customer sheet land in the default incident folder — add them to the sheet to route their Docs.
 - [ ] Delete the qc/ redirect stubs once logs show no hits.
-- [x] Reports port: incident pages still read the tracker Sheet via gviz; consider reading qc_incidents. (rpt-03 reads qc_incidents; gviz removed in rpt-05)
 
 ### Reports · CUT OVER — v2 at /v2/reports (rpt-01…05)
 
-- [x] rpt-01 Cutting activity → `/v2/reports/cutting` (ET days, flagged sessions, recharts)
-- [x] rpt-02 Incident history backfill: tracker Sheet → `qc_incidents` (MIGRATION-GATED, one-time) · run 2026-10-23, 72 rows
-- [x] rpt-03 Incidents → `/v2/reports/incidents` (D1 only; incident rate from tracker baseline + D1 jobs)
-- [x] rpt-04 Scrap → `/v2/reports/scrap` (scrap_events only; VIEW drop moved to rpt-05)
-- [x] rpt-05 Cutover after Steve tests: home card + both navs → `/v2/reports`; legacy `reports/*` → stubs; Orders report retired → Job Board; remove `/api/reports/*` worker routes; retire gviz + `INCIDENT_TRACKER_JSON_URL`; drop the `scrap_log` VIEW once the legacy scrap pages are stubs · shipped in the rpt-05 commit; VIEW drop by the Orchestrator post-deploy
 - [ ] Delete the reports/* redirect stubs (and reports/_archived/) once Cloudflare logs show no hits — same rule as the qc/* stubs.
 - [ ] Reports i18n (en/es/ht) — legacy `reports/reports-i18n.js` as the source
 - [ ] Cutting data hygiene (from rpt-01 numbers): operators tap Start/Stop without cutting (8/32 sessions < 1 min, wk of 10-16) and tick items off with near-zero session time; floor training, not code
@@ -228,9 +214,7 @@
 - [ ] Report: consider moving stats server-side if filtered ranges regularly hit the
   5,000-row cap.
 
-- [ ] **prod-b follow-up — drop legacy v1 tables** (`silos`, `bead_types`,
-  `bead_transactions`) via a separate, held migration. prod-b-04 has shipped, so this is actionable
-  once a grep confirms nothing references them. Irreversible — own prompt.
+- [ ] **Orchestrator data step (after cleanup-01 deploys):** DROP the empty v1 `bead_transactions`, `silos`, `bead_types` (0 rows; their last writer was removed in cleanup-01) and strip `logistics.v2` from the two roles that still carry it, through the D1 connector with Steve's OK. Record it under cleanup-01 in CHANGELOG.
 - [ ] Silo aging: display-only "time since full" ships in prod-b-03; enforce a minimum age
   before molding once the plant has a confirmed aging target (see eps-engineer-agent §6.6).
 
@@ -498,7 +482,6 @@
 - [ ] **dlv-02 follow-up — sheet rows whose suffix skips loads mis-number them.** Sequential numbering by `load_count` is the rule (suffixes are inconsistent in live data), but INV 4440 (`001-005` Mon ×5 + `009` Tue ×1, job has 9 loads) gives Tue 11:00AM to load 6. A mismatch only logs `Sheet describes N loads; job has M`. Decide whether a mismatch should skip the job or surface on the dashboard.
 - [ ] **dlv-02 follow-up — a slipped order keeps its old week's schedule row, and the sync numbers it first.** Past weeks' `schedule_rows` are never pruned, so an order moved to a later week has both rows. Sequential numbering gives load 1 the stale old time; the real time goes to a phantom load past `load_count`, and no alert fires (live example: INV 4386 `take 1` Thu + `take 2` Wed → `Thurs 10:00AM | Wed 10:00AM`). Design decision needed: restricting to the newest week breaks legitimate cross-week splits after rollover. Options include: skip/flag jobs whose sheet load total exceeds `load_count`, or prefer the latest week per load.
 - [ ] **dlv-02 follow-up — subscribe roles to "Delivery time changed"** in `/v2/admin` → Roles (ships with no subscribers).
-- [x] **Answered by ship-days-01 (2026-10-29): yes.** D1 triggers mirror `job_load_times.delivery_date` onto `loading_assignments.ship_date`, and Assign Ship Days is removed. Original item: **dlv-03 follow-up — should the sheet's per-load day also set `loading_assignments.ship_date` (Assign Ship Days)?** Left separate for now: `job_load_times.delivery_date` is the delivery day, Assign Ship Days the dock day, and the editor only reads the latter as a default.
 - [ ] **split-days-01 follow-up — per-load ship days don't move when the order's ship date changes.** Moving an order's date leaves any `loading_assignments.ship_date` overrides behind. Today this is harmless for unsplit orders (ignored), but a split order would keep its old days. Decide: clear overrides on order-date change, or shift them by the same delta. *ship-days-01 note: per-load days now come from the schedule (`job_load_times`, mirrored by triggers). A schedule change moves them automatically; only an in-app order-date change without a schedule change still leaves them behind.*
 - [ ] **INV 4386 — shipment status stuck `ready_to_ship` while its only load is `delivered`** (after the 9/29 delivered→not_started revert and the 9/30 re-delivery). Investigate the revert/redeliver path's shipment status sync.
 - [ ] **tls-01: `nextShipDay` is Mon–Fri only.** Plant holidays aren't modeled, and an occasional Saturday ship
@@ -508,9 +491,6 @@
 - [ ] **tls-02: Marina Foam is matched by name** (customer / ship_to_company contains "marina foam"). If the TV
   loading board or the per-order loading sheets should also hide sister-company deliveries, reuse
   `isSisterCompanyDelivery()`.
-- [ ] **logi-rollout-02: give Invoice Analytics (and Load Builder) their own middleware lines
-  before removing the `/v2/logistics` dark-launch rule.** Otherwise the pages fall through to
-  `logistics.dashboard` while their APIs stay on `logistics.v2`.
 - [ ] **Invoice Analytics history date-range filter** (needs `/v2/api/logistics/flags` to accept `?from/&to`) — deferred.
 - [ ] **Invoice dedup Replace isn't atomic.** `POST /v2/api/logistics/invoice`'s clean-replace
   (resolve → `DELETE FROM freight_invoice_lines` → persist) is 3 separate D1 calls, not one
@@ -536,9 +516,6 @@
 - [ ] **`lb-ui-09` follow-up — `bolShared.ts`'s new `loadingDiagramPdfBytes` merge option has no live combined-PDF caller.** Same status as its sibling `packingSlipPdfBytes`, which was ALSO found to be dead code this session (`bolDomGlue.ts`'s `buildCombinedBolPdf` does its own separate packing-slip merge and never threads either option through `generatePdf`). Both are proven correct by `bolShared.selfcheck.ts`'s `runBolSharedPdfMergeSelfCheck` and ready for a future prompt that brings `bolDomGlue.ts`/`BolViewerModal.tsx` into scope to actually wire them into the live "View BOL" combined-packet render.
 - [ ] **`lb-ui-09` follow-up — no dock assignment exists yet for a load-builder-sourced BOL, so `trailerNo` starts blank on every trailer** (the planner fills it in by hand during the BOL form). Once a load is dock-assigned (loading dashboard, a separate v2 unit), there's no automatic link-back to pre-fill a BOL generated from Load Builder before that assignment happens — expected given the two flows aren't sequenced together yet, named here in case Steve wants that connected later.
 - [ ] **`lb-ui-07` follow-up — no "add a trailer from nothing" entry point.** `pack()` never emits a zero-row trailer, `TrailerDiagram`'s "Edit…" button has nothing to render against when `plan.trailers.length === 0`, and this prompt's locked operation list has no "add trailer" op. Matches legacy's own manual-editor limitation (it only ever opens against an existing trailer) but is worth naming since `lb-ui-06` made small/zero-fit presets more reachable. The from-scratch build path (`addRow`/`addColumn` from an empty shell) is verified headlessly and works — only the UI entry point is missing.
-- [x] resolved lbr-07 — Move or swap repositions any stack across rows (swap, a "+" slot, or a new row); a whole-row ↑/↓ button and the bulk per-row base-SKU rewrite were not built — re-raise if floor testing needs them. **`lb-ui-07` follow-up — row reorder and row-level base-SKU swap not ported.** Legacy's manual editor also has row reorder ↑/↓ (`load-builder.html:2390-2397`) and a row-level base-SKU selector that rewrites every column's width in that row at once (`:2381-2388`). Neither is in this prompt's locked scope; `moveColumn` covers column-level repositioning but not whole-row reordering or a bulk per-row SKU swap.
-- [x] resolved lbr-07 — the keyboard picker is gone; every tap target now shows its verdict before anything moves. `CustomizeEditor.tsx`'s keyboard target-picker (`handleChooseTarget`) commits a move with no `canDrop` pre-check at all (width or depth) — only the drag-hover path gets live feedback today. A keyboard-driven move can still trigger `row-width`/`trailer-length` guards after the fact, same as any move, but the picker never warns before confirming the way dragging does.
-- [x] resolved lbr-07 — `evaluateSlotTarget` simulates the placement for every source kind (held stacks included) and fades a slot that would push a row past the doors ("too deep · pushes trailer N to …"); `dissolve.ts` itself is unchanged. Dissolve's holding→trailer depth risk is not covered by the `lb-ui-03` `canDrop` fix (`from` is optional and omitted for that path) — a held column dropped into a shallow row can still overflow a downstream row with no pre-drop warning, only the post-apply guard banner.
 - [ ] Dissolve doesn't recompute `packEngine.ts`'s tall/narrow `"[stability: ...]"` rationale note for a receiver column it newly makes tall/narrow — that logic lives inside closed `packEngine.ts` (`applyStabilityWarnings`) and dissolve only preserves an existing note, it doesn't add a new one.
 - [ ] **PXXX-c finding — `?assignment=` deep link can't reach an `archived` row.** The
   `include_archived=1`/`showAll=true` fetch-and-filter widening the deep-link resolver applies
@@ -554,10 +531,6 @@
   lightweight periodic job that flags any job whose non-archived `loading_assignments` count exceeds
   its `load_count`, so future regressions in the reconcile/backfill/adopt paths surface proactively
   instead of silently accumulating orphan `awaiting` cards again.
-- [x] **Moot (ship-days-01, 2026-10-29): the legacy `load-days` branch and v2 `ShipDaysModal` were removed.** Original item: **P325 / split-days-01 follow-up — harden legacy `PUT /api/loading-assignments/load-days`** to return
-  the matched-row count and warn on 0-row saves (it currently returns success on 0 matched rows). Callers:
-  legacy Job Board split modal AND v2 `/v2/board` `ShipDaysModal.tsx`. It is **not** legacy-only, so it
-  survives jb-09 unless the v2 modal moves to its own route.
 - [ ] **P271 follow-up — `loading_assignments.archived_at`.** Apply the same orthogonal-archive
   treatment (P271) to `loading_assignments.loading_status = 'archived'` (site L24 in
   `status-write-site-inventory.md`) — same two-facts-one-column defect, but lower-stakes since the
@@ -711,7 +684,6 @@ schedule badge):**
 - [ ] Block-calc: per-setup 2D cut diagram (port the legacy Canvas render) — optional polish.
 - [ ] Block-calc: optional per-setup secondary/scrap nesting (small parts into a big part's block remnants) — the old single-part secondaries feature, re-expressed per setup, if yield demands it.
 - [ ] Cutting route is tribal knowledge (supervisor decides which line cuts which axis; Main Line can chunk, Blue Line can run standalone). Consider capturing the route on the job so chunk/part targets stop depending on unwritten context.
-- [x] Wire scrap capture into `<CompleteLineModal>` once the native scrap DB lands (reason + cubic-in + shift + density; derive operator/inv/line/date from session+job; no Laminate scrap) — qc-05 (also on clock-out)
 - [ ] Material-consumption capture at line-complete — needs a job→block_inventory link + on-hand block picker (block_consumption_log decrements real stock)
 - [ ] Cut-list photo polish if asked: multi-photo per session, lightbox zoom, delete/replace, retention cleanup
 - [ ] Wire notifications into v2 cutting (v2 dispatch now exists: `src/lib/push.ts`, carrier-04; triggers: job-done, andon/flag-for-help)
@@ -731,16 +703,6 @@ schedule badge):**
 
 > Move scrap off the Google-Sheets mirror (`mirrorScrapLogToSheet`) onto a first-class platform
 > database. Becomes the persistence target for the v2 CompleteLineModal scrap section.
-- [x] Design the native scrap schema/UI (own dashboard + entry); decide whether to extend the
-      existing `scrap_log` table or supersede it — qc-04: `scrap_events` supersedes it; `scrap_log`
-      is a compatibility VIEW
-- [x] Add "Laminate" to the scrap line/machine options for cutting-floor capture (current QC enum
-      omits it)
-- [x] Retire the Google-Sheets mirror; migrate existing scrap_log consumers (QC scrap-log form,
-      reports) to the native store — form + mirror retired; reports read the compat VIEW
-- [x] **qc-05** — Wire v2 cutting CompleteLineModal scrap section to the native API (Mark Complete + clock-out; `POST /v2/api/cutting/scrap`)
-- [x] Batch scrap entry (several events in one submit) as part of the native scrap UI.
-- [x] Reports port: read scrap_events directly and drop the scrap_log compatibility VIEW. (rpt-04 reads scrap_events; VIEW drop in rpt-05)
 - [ ] qc follow-up — scrap capture on the Cross Cutter / Hole Cutter board (ChunkStopModal), if the floor wants it.
 - [ ] qc follow-up — consider making scrap an explicit answer ("No scrap" or entries) at Mark Complete once operators are used to it.
   - Evidence (rpt-04 empty state): Oct 20 → 23, every board Stop / Mark Complete skipped scrap. Pair the "No scrap" answer with Steve's floor training.
@@ -764,13 +726,6 @@ Admins only for now (no permission seed); Steve grants `qc.marina` to a role in 
 Scope: `Prompts/marina-scope.md` + `Prompts/marina-scope-update-2026-10-22.md` (the update wins: own page, not a `/v2/qc` tab).
 Fully decoupled from jobs/orders/parts/Drive/native scrap. Run sequentially (shared CHANGELOG).
 
-- [x] marina-02 — `src/lib/inches.ts` (`parseInches` "41 3/8" | "41.375" | "41-3/8"; `formatInches` → nearest 1/16"; new — `board.ts` parser is private), R2 file routes (`BOL_PHOTOS`, copy the `api/board/[id]/prints` pattern: 25 MB cap, `sanitizeFilename`, `r2_key` never returned; `GET /files/{id}` streams, `PATCH /files/{id}` supersede/kind), jobs CRUD (`GET /jobs?status=` with tallies; create/edit/complete/reopen; delete cascades children + R2 objects). All under `/v2/api/qc/marina/*`, all mutations `logActivity()`.
-- [x] marina-03 — parts / dims / pieces / measure routes + piece state machine (pass | rework_pending → accepted | scrapped; fail forces a Rework/Scrap disposition; rework = attempt N+1). Tolerance check authoritative server-side vs `marina_jobs.tolerance_in`; `PUT /parts/{id}/dims` → 409 `dims_locked` once any piece has measurements.
-- [x] marina-04 — `/v2/qc/marina` page (direct URL only): open/complete job list with tally chips + rework-pending badge, "New job" (name + customer), job detail (files with superseded collapsed, parts list with "Next piece"), manual PDF upload. Edit controls gated on `X-User-Can-Edit-Marina`.
-- [x] marina-05 — cut-sheet setup screen `/v2/qc/marina/[jobId]/setup/[fileId]` (pdf.js page render + label / dim-chip / notes suggestions from page text, one part saved per page, Skip, resume at first to-do) + job-page part editing (Add part by hand, edit label & notes, edit dims with lock / unlock, delete). Original scope line: pdf.js (`pdfjs-dist` lazy loader from `lib/packingSlip.ts`) renders each page; prefilled label from `… TOP` text, deduped value chips (`\d+( \d+/\d+)?`, desc, minus label numbers) → tap to make a dim with L/W/H/custom name; callouts (REPLACE / NO FILE) → notes; Skip page / Save all; manual entry fallback.
-- [x] marina-06 — `/v2/qc/marina/parts/[partId]` inspect screen (FractionKeypad, live ✓/✗, disposition step, piece history + corrections) and `/v2/qc/marina/rework` queue. Original scope line: inspect piece (collapsible page thumbnail, one big input per dim, fraction keypad ⅛…⅞ + 1/16, live red when out of ±3/16) → disposition sheet on fail → "Add another of this part"; rework queue (rework_pending filter → re-measure).
-- [x] marina-07 — Marina Foam header button on `/v2/qc` (shown on `qc.marina` view; admins). Went live before the floor test at Steve's call (he is the only QC user).
-- [x] Marina floor-test fixes (Steve's test) — Rework vs Scrap colour, sixteenth keys, one-hand reach. Steve's 10-29 floor test passed colour, sixteenths and reach ("everything else seems to work"); the one issue found (Other dims couldn't be saved) shipped as marina-fix-01.
 - [ ] Fraction misses on new cut sheets: when one happens, add that PDF's text dump as a `lib/marina/fixtures/` fixture and fix `cutSheet.ts` against it (stacked numerator/denominator is the likely case).
 - [ ] Phase 2: marina-08 — `DB_Migrations/marina-intake.sql` (`marina_intake`, `message_id` UNIQUE) + separate Email Worker (`xpanda-marina-intake/`, postal-mime, same `DB` + `BOL_PHOTOS`): accept only original sender `@marinafoam.com` via Steve's Gmail forward, PDFs → R2 + `marina_files` (job_id NULL), drop `*.zip`, kind pre-classified by filename, Gmail forwarding-verification passthrough. MIGRATION-GATED + Steve's manual steps (verify no MX on xpandaops.com, Email Routing `marina@` → Worker, Gmail forwarding address + filter `from:piper@marinafoam.com has:attachment`). Decide CI path filter vs manual deploy at prompt time.
 - [ ] Phase 2: marina-09 — Inbox section on `/v2/qc/marina`: file → job(s) (one per cut-sheet filename; drawings attach to same-email jobs), kind flip, "Replace file on job X" on revision (supersede; dims stay locked if measured), ignore. No auto-setup — Steve confirms. After 08 is live and a test email lands.
@@ -886,10 +841,8 @@ Fully decoupled from jobs/orders/parts/Drive/native scrap. Run sequentially (sha
 - [ ] [Logistics (v2)] **Unit 2 follow-up — no v2 `bol-customers` address-book search.** Legacy's Generate BOL flow has a customer search panel (`GET /api/bol-customers`) that autofills ship-to fields and sets `customer_id`; v2's `BolGenerateModal` has no equivalent endpoint yet, so `customer_id` is always sent `null`. Build `/v2/api/bol-customers` (read-only) and wire the search panel back in if Steve wants this restored.
 - [ ] [Logistics (v2)] **`lb-ui-04` follow-up — the fenced GET-sweep could instead filter expired rows in the `SELECT` (`WHERE expires_at >= ?`) rather than gating the `DELETE` on the write flag.** Same zero-divergence outcome (v2 never shows expired rows) at zero write risk, since it never touches the fence question at all. Not made — the gated-`DELETE` approach was already reviewed and is correct as shipped — but worth considering if Steve would rather v2 never show stale rows even pre-Phase-3.
 - [ ] [Logistics (v2)] **`lb-ui-08` follow-up — the empty-diagram-area "remaining floor" region has no visual fill/label inside the diagram itself.** Legacy's SVG shades the unused-length region and centers a "N remaining" label inside it; this prompt's PDF only captions the same fact below the diagram (`"636"L × 98"W — 10' 8" remaining"`), a deliberate simplification to keep the diagram box's layout math simple. Revisit if Steve wants closer visual parity.
-- [x] resolved lbr-09 — [Logistics (v2)] **`lb-ui-08` follow-up — the pieces/stack-breakdown tables clip instead of scaling or paginating when a trailer has many distinct SKUs or stack patterns.** Fixed page height budget below the diagram is ~258pt at a 14pt row height, so roughly 17 rows before content runs off the bottom of the page — a mixed load with many distinct SKUs or stack patterns can reach that. Legacy's `html2canvas`-rasterized path scaled the whole print HTML to fit one page instead of clipping; this prompt's vector approach has no equivalent fit-to-page step. Neither of this session's two bundled fixtures reached the limit (4 and 2 pieces-table rows respectively), so it wasn't hit in practice, but it's a real gap worth a fix (auto-shrink row height, or a second page) if Steve's Phase 2 pass turns up a load that clips.
 - [ ] [Logistics (v2)] **`lb-ui-09` follow-up — a load-builder-sourced BOL's trailers all start with IDENTICAL ship-to/carrier/contact/PO/date prefill**, with no per-trailer override UI beyond hand-editing each page. This matches the existing dock-assignment path's own behavior exactly (not a regression introduced by this prompt — that path has always prefilled every trailer identically too), but is worth naming as a shared limitation if Steve wants a "carry from trailer 1, override trailer 2+" UI later.
 - [ ] [Logistics (v2)] **`lb-ui-09` follow-up — checking "Include Loading Diagram" on multiple trailers opens one `window.open` per trailer across a loop with an `await` between each**, which can lose the click's original user-gesture context after the first round-trip; browsers are more likely to pop-up-block tab 2+ than the single-tab case `LoadingDiagramPrintButton.tsx` already handles cleanly. The existing `!opened` form-error message covers it per-trailer (tells the planner to allow pop-ups) but doesn't prevent the block. Worth a batched/sequential-with-confirmation UI later if this proves annoying in Phase 2 testing.
-- [x] [Logistics (v2)] resolved lbr-07 — "Take pieces off the top… → stack onto" moves pieces straight from one stack onto another, across rows, as a true relocation (no round-trip through balance). **`lb-ui-07` follow-up — cross-row layer drag not ported.** Legacy's manual editor lets a layer be dragged from one column directly into another, including across rows, with auto-cleanup of the emptied source column/row (`load-builder.html:2412-2438`). Not in this prompt's locked operation list (`addRow`/`addColumn`/`addLayer`/`setLayerCount`/`removeRow` only) — today the equivalent requires zeroing the layer in its source column (returns it to unplaced balance) and re-adding it via `addLayer` on the target, which is not a true relocation (it round-trips through the balance bucket instead of moving directly). Revisit if Steve's floor testing flags this as a real workflow gap.
 - [ ] [Logistics (v2)] **P392 follow-up — emit `loading_assignment` entity_type from `public.js`'s in_transit/delivered
   dispatch instead of `shipment`.** Would let future shipment-status notifications skip the
   `/api/shipments?id=` → `job_id` → assignment resolve hop entirely. Existing ~850 historical

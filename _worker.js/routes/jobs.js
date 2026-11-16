@@ -1546,25 +1546,6 @@ export async function handleApiShipments(request, env) {
         delivery_time, scrap_pickup, delivery_incident, delivery_incident_notes
       ).run();
 
-      // Auto-create bead receive transaction if inbound with silo
-      if (direction === "inbound" && weight_lbs > 0 && payload.silo_id) {
-        const siloId = String(payload.silo_id).trim();
-        const silo   = await db.prepare("SELECT * FROM silos WHERE id = ?").bind(siloId).first();
-        if (silo) {
-          const beadTypeId = payload.bead_type_id ? String(payload.bead_type_id).trim() : silo.bead_type_id;
-          const newLevel   = silo.current_lbs + weight_lbs;
-          const txId       = crypto.randomUUID();
-          await db.batch([
-            db.prepare("UPDATE silos SET current_lbs = ?, updated_at = datetime('now') WHERE id = ?")
-              .bind(newLevel, siloId),
-            db.prepare(`
-              INSERT INTO bead_transactions (id, silo_id, bead_type_id, type, quantity_lbs, reference, notes)
-              VALUES (?, ?, ?, 'receive', ?, ?, ?)
-            `).bind(txId, siloId, beadTypeId, weight_lbs, bol_number || id, `Auto-logged from inbound shipment ${id}`),
-          ]);
-        }
-      }
-
       const row = await db.prepare("SELECT * FROM shipments WHERE id = ?").bind(id).first();
       await logActivity(db, 'create', 'shipment', id,
         `Created shipment for ${customer} — ${direction} ${status}`,

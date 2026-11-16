@@ -1,6 +1,6 @@
 // src/app/api/logistics/invoice/route.ts  →  /v2/api/logistics/invoice
 // Ingest + resolve + persist + return a parsed freight invoice (PXXX invoice-analytics -c).
-// Gated admin-only by middleware's logistics.v2 rule. Addresses come only from `bols` — the
+// Gated by middleware's /v2/api/logistics -> logistics.dashboard rule (lgx-roll-01). Addresses come only from `bols` — the
 // invoice is never read for addresses, a BOL is never parsed here (that's -d's client-side PDF
 // parse, which only extracts {lineNo, shipDate, loadNumber, poText, amount} rows).
 import { NextResponse } from "next/server";

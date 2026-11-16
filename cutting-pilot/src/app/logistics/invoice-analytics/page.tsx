@@ -1,5 +1,5 @@
 // src/app/logistics/invoice-analytics/page.tsx  →  /v2/logistics/invoice-analytics
-// Server shell. Gated admin-only by -b's `/v2/logistics` -> `logistics.v2` middleware rule
+// Server shell. Gated by middleware's `/v2/logistics` -> `logistics.dashboard` rule (lgx-roll-01)
 // (startsWith covers this subpath already — no routing work needed here).
 import { headers } from "next/headers";
 import { validateSession } from "@/lib/session";

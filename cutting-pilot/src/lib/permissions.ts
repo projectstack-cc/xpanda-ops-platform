@@ -17,7 +17,6 @@ export const PERMISSION_LABELS: Record<string, { group: string; label: string }>
   "logistics.loading.manage":       { group: "Logistics",     label: "Loading — Bay Management (manager)" },
   "logistics.loading.tv":           { group: "Logistics",     label: "Loading Board (TV)" },
   "logistics.carrier_view":         { group: "Logistics",     label: "Carrier 2-Day View" },
-  "logistics.v2":                   { group: "Logistics",     label: "v2 Migration (dark launch — admin only)" },
   "manufacturing.calculators":      { group: "Manufacturing", label: "Calculators" },
   "manufacturing.cutting":          { group: "Manufacturing", label: "Cutting Dashboard" },
   "manufacturing.cutting.manage":   { group: "Manufacturing", label: "Cutting — Manage (assign/reorder chunk tasks)" },

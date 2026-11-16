@@ -5,14 +5,13 @@
 // path as a v2-owned, fenced route, the identical precedent ../bols/route.ts already set for the
 // (also pre-existing) `bols` table -- the fence has to live in a v2-owned handler to apply at all.
 //
-// GET's list query mirrors legacy's exactly, but the expiry sweep (`DELETE FROM saved_loads WHERE
+// GET's list query mirrors legacy's exactly, and the expiry sweep (`DELETE FROM saved_loads WHERE
 // expires_at < ?`, bols.js:781) that legacy runs unconditionally as a side effect of every list
-// read is itself gated on V2_LOGISTICS_WRITES_ENABLED here, even though GET is otherwise live. This
-// route is reachable from a dark-launched page (admin-only via middleware's logistics.v2 gate) with
-// no other write path open -- an ungated DELETE on that path is exactly the category the fence
-// exists to prevent, regardless of the fact that the same DELETE already runs unconditionally on
-// legacy's own equivalent surface. Until the flag flips, v2's list may show a handful of rows
-// legacy has already swept -- a named, bounded, cosmetic divergence, not an ungated prod write.
+// read is also gated on V2_LOGISTICS_WRITES_ENABLED here, like POST. Middleware gates this route on
+// /v2/api/saved-loads -> logistics.load-builder (lbr-06); its page is the Load Builder Beta. The
+// fence flag is currently true (flipped in lgx-write-01), so the sweep and POST both run; it is
+// kept as a one-line kill switch -- setting it false turns POST into a 501 and skips the sweep
+// (v2's list may then show a handful of rows legacy has already swept -- cosmetic, not a write).
 //
 // lbr-04: GET takes an optional `?job_id=` filter (that order's rows, newest updated_at first,
 // same columns and response shape) so Load Builder can reopen an order's saved load. POST writes
