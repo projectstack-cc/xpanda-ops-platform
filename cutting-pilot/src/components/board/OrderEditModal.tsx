@@ -72,7 +72,6 @@ interface EditJob {
   hb_chunk_breakdown: string | null;
   hb_on_hand: string | null;
   offload_zones_enabled: boolean;
-  combo_id: string | null;
   trailer_group_id: string | null;
 }
 
@@ -614,8 +613,8 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
     onSaved();
   }
 
-  // jb-06: trailer group / combo changed (immediate writes via legacy PUT /api/jobs). Re-read the
-  // saved job and patch ONLY those two fields into the job and the dirty snapshot — re-running the
+  // jb-06: trailer group changed (immediate writes via legacy PUT /api/jobs). Re-read the
+  // saved job and patch ONLY that field into the job and the dirty snapshot — re-running the
   // full load would wipe unsaved form edits — then refresh the board.
   async function handleLinksChanged() {
     if (!jobId) return;
@@ -623,7 +622,7 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
       const res = await fetch(`/v2/api/board/${jobId}`);
       const data: BoardResponse = await res.json();
       if (res.ok && data.ok && data.job) {
-        const next = { combo_id: data.job.combo_id ?? null, trailer_group_id: data.job.trailer_group_id ?? null };
+        const next = { trailer_group_id: data.job.trailer_group_id ?? null };
         setJob((prev) => (prev ? { ...prev, ...next } : prev));
         setOriginalSnapshot((prev) => {
           if (!prev) return prev;
@@ -956,12 +955,11 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
           {/* board-prints-02: uploads/deletes save immediately (like OrderLinksSection), not via Save. */}
           <JobPrintsSection jobId={job.id} canEdit={canEditPrints} mode="edit" />
 
-          {/* jb-06: Trailer group + combo — immediate-save links, after the schedule/shipping area */}
+          {/* jb-06: Trailer group — immediate-save links, after the schedule/shipping area (combo removed in combo-01) */}
           <OrderLinksSection
             jobId={job.id}
             shipDate={savedShipDate}
             trailerGroupId={job.trailer_group_id}
-            comboId={job.combo_id}
             boardJobs={boardJobs}
             canEdit={canEditJob}
             onChanged={handleLinksChanged}

@@ -269,7 +269,7 @@
 
 ## Manufacturing / Cutting (React pilot)
 
-- [ ] **Saved combos retirement — decided (Steve, 2026-11-16): combo-01** removes Job Board "Link combo" (v2 + Classic) and `/api/combos`; runs right after blk-03.
+- [ ] **Orchestrator data step (after combo-01 deploys, both workers):** DROP INDEX idx_jobs_combo_id → ALTER TABLE jobs DROP COLUMN combo_id → ALTER TABLE cut_plans DROP COLUMN combo_id → DROP TABLE saved_combos, via the D1 connector with Steve's OK; record under combo-01.
 
 - [ ] **cutting-ids-01 follow-up — after deploy, re-run the orphan count; new orphans should be 0**
   (`SELECT COUNT(*) FROM cutting_line_progress clp WHERE NOT EXISTS (SELECT 1 FROM job_line_items li WHERE li.id = clp.line_item_id)` — baseline 311 on 2026-10-06).

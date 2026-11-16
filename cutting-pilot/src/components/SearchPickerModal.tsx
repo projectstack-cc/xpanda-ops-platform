@@ -1,6 +1,6 @@
 "use client";
 // src/components/SearchPickerModal.tsx
-// jb-06 — the one reusable searchable pick-list (trailer-group candidates, saved combos, …).
+// jb-06 — the one reusable searchable pick-list (trailer-group candidates, parts, …).
 // Composes @/components/Modal; callers map their records to { id, primary, secondary }.
 import { useEffect, useState } from "react";
 import { Search } from "lucide-react";

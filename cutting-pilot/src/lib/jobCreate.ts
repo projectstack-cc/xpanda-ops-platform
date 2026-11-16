@@ -46,7 +46,6 @@ export interface JobCreateInput {
   packing_instructions: string;
   contact_name: string;
   contact_phone: string;
-  combo_id: string | null;
   priority: string;
   confirmed_to_ship: boolean;
   processes: Array<{ name: string; completed: boolean }>;
@@ -156,20 +155,19 @@ export async function createJob(
       id, status, customer, po_number, invoice_number, ship_date, ship_day,
       location, delivery_time, method, carrier, load_count, total_bdft,
       scrap_pickup, sales_lead, bol_info, payment_info, notes,
-      cutting_instructions, packing_instructions, contact_name, contact_phone, combo_id,
+      cutting_instructions, packing_instructions, contact_name, contact_phone,
       priority, confirmed_to_ship, processes, created_at, updated_at,
       packing_slip_key, packing_slip_pdf, packing_slip_filename, packing_slip_invoice, source,
       ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
       ship_to_city, ship_to_state, ship_to_zip,
       ship_to_verified, ship_to_standardized, ship_to_verified_at, trailer_group_id,
       offload_zones_enabled
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
   `).bind(
     id, status, customer, input.po_number, input.invoice_number, ship_date, input.ship_day,
     location, delivery_time, method, carrier, load_count, total_bdft,
     scrap_pickup, input.sales_lead, input.bol_info, input.payment_info, input.notes,
     input.cutting_instructions, input.packing_instructions, input.contact_name, input.contact_phone,
-    input.combo_id,
     input.priority, input.confirmed_to_ship ? 1 : 0, JSON.stringify(input.processes), ts, ts,
     packing_slip_key, packing_slip_pdf, input.packing_slip_filename, input.packing_slip_invoice, source,
     input.ship_to_company, input.ship_to_attention, input.ship_to_street, input.ship_to_street2,

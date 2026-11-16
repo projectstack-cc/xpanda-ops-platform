@@ -32,7 +32,6 @@ export function rowToJobInput(job: Record<string, any>, lines: Array<Record<stri
     packing_instructions: s(job.packing_instructions),
     contact_name: s(job.contact_name),
     contact_phone: s(job.contact_phone),
-    combo_id: job.combo_id ?? null,
     priority: s(job.priority),
     confirmed_to_ship: !!job.confirmed_to_ship,
     processes,

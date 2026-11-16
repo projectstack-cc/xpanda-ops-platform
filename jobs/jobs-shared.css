@@ -393,7 +393,7 @@ button, input, select, textarea { font: inherit; }
 }
 
 /* P307: job-entry modal widened ~20% (700 -> 840) for the new Cutting Instructions field —
-   scoped to the job-entry modal only, other .jobs-modal-panel consumers (parts/combo/trailer
+   scoped to the job-entry modal only, other .jobs-modal-panel consumers (parts/trailer
    pickers, BOL view) keep the 700px base. */
 #jobs-modal .jobs-modal-panel {
     max-width: 840px;
@@ -670,16 +670,16 @@ button, input, select, textarea { font: inherit; }
     flex-wrap: wrap;
 }
 
-/* ── COMBO ── */
+/* ── LINK AREA (trailer group members + link buttons) ── */
 
-.jobs-combo-area {
+.jobs-link-area {
     display: flex;
     align-items: center;
     gap: 10px;
     flex-wrap: wrap;
 }
 
-.jobs-combo-badge {
+.jobs-link-badge {
     background: var(--accent-soft);
     border: 1px solid var(--card-border);
     border-radius: 8px;
@@ -689,18 +689,6 @@ button, input, select, textarea { font: inherit; }
     align-items: center;
     gap: 8px;
 }
-
-.jobs-combo-clear {
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: var(--muted);
-    font-size: 16px;
-    padding: 0;
-    line-height: 1;
-}
-
-.jobs-combo-clear:hover { color: var(--danger-bg); }
 
 /* ── PICKER OVERLAY ── */
 

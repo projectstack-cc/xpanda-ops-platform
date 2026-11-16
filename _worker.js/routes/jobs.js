@@ -94,7 +94,7 @@ export async function handleApiJobs(request, env) {
     j.id, j.status, j.archived_at, j.trailer_group_id, j.trailer_stop, j.customer, j.po_number, j.invoice_number, j.ship_date, j.ship_day,
     j.location, j.delivery_time, j.method, j.carrier, j.load_count, j.total_bdft,
     j.scrap_pickup, j.sales_lead, j.bol_info, j.payment_info, j.notes,
-    j.cutting_instructions, j.packing_instructions, j.contact_name, j.contact_phone, j.combo_id,
+    j.cutting_instructions, j.packing_instructions, j.contact_name, j.contact_phone,
     j.priority, j.priority_level, j.confirmed_to_ship, j.processes, j.created_at, j.updated_at,
     j.hb_chunks_required, j.hb_chunk_breakdown, j.offload_zones_enabled, j.hb_on_hand,
     j.packing_slip_filename, j.packing_slip_invoice, j.source, j.ship_to_verified,
@@ -619,7 +619,6 @@ export async function handleApiJobs(request, env) {
     const ship_to_standardized = payload.ship_to_standardized
       ? JSON.stringify(payload.ship_to_standardized) : null;
     const ship_to_verified_at  = payload.ship_to_verified_at ? String(payload.ship_to_verified_at) : null;
-    const combo_id             = payload.combo_id ? String(payload.combo_id).trim() : null;
     const load_count           = Number.isFinite(Number(payload.load_count)) ? Number(payload.load_count) : 1;
     const total_bdft           = Number.isFinite(Number(payload.total_bdft)) ? Number(payload.total_bdft) : 0;
     const confirmed_to_ship    = payload.confirmed_to_ship ? 1 : 0;
@@ -669,19 +668,19 @@ export async function handleApiJobs(request, env) {
           id, status, customer, po_number, invoice_number, ship_date, ship_day,
           location, delivery_time, method, carrier, load_count, total_bdft,
           scrap_pickup, sales_lead, bol_info, payment_info, notes,
-          cutting_instructions, packing_instructions, contact_name, contact_phone, combo_id,
+          cutting_instructions, packing_instructions, contact_name, contact_phone,
           priority, confirmed_to_ship, processes, created_at, updated_at,
           packing_slip_key, packing_slip_pdf, packing_slip_filename, packing_slip_invoice, source,
           ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
           ship_to_city, ship_to_state, ship_to_zip,
           ship_to_verified, ship_to_standardized, ship_to_verified_at, trailer_group_id,
           offload_zones_enabled
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).bind(
         id, status, customer, po_number, invoice_number, ship_date, ship_day,
         location, delivery_time, method, carrier, load_count, total_bdft,
         scrap_pickup, sales_lead, bol_info, payment_info, notes,
-        cutting_instructions, packing_instructions, contact_name, contact_phone, combo_id,
+        cutting_instructions, packing_instructions, contact_name, contact_phone,
         priority, confirmed_to_ship, processes, now, now,
         packing_slip_key, packing_slip_pdf, packing_slip_filename, packing_slip_invoice, source,
         ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
@@ -964,7 +963,6 @@ export async function handleApiJobs(request, env) {
     if ("total_bdft"        in payload) { sets.push("total_bdft = ?");        binds.push(Number.isFinite(Number(payload.total_bdft)) ? Number(payload.total_bdft) : 0); }
     if ("confirmed_to_ship" in payload) { sets.push("confirmed_to_ship = ?"); binds.push(payload.confirmed_to_ship ? 1 : 0); }
     if ("offload_zones_enabled" in payload) { sets.push("offload_zones_enabled = ?"); binds.push(payload.offload_zones_enabled ? 1 : 0); }
-    if ("combo_id"  in payload) { sets.push("combo_id = ?");  binds.push(payload.combo_id ? String(payload.combo_id).trim() : null); }
     if ("processes" in payload) {
       const v = Array.isArray(payload.processes) ? JSON.stringify(payload.processes) : '[]';
       sets.push("processes = ?"); binds.push(v);

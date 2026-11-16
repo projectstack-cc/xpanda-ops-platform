@@ -5,7 +5,7 @@ import { handleApiBolCustomersSeed, handleApiBolCustomers, handleApiBolCarriers,
          handleApiPartsSeed, handleApiLoadBuilderSkusDeleteAll, handleApiLoadBuilderSkus,
          handleApiSavedLoads } from './routes/bols.js';
 import { handleApiJobs, handleApiShipments, handleApiAddressValidate, handleApiAssignableUsers, handleHoleyChunksPreview, handleHoleyChunksBackfill } from './routes/jobs.js';
-import { handleApiParts, handleApiCombos } from './routes/production.js';
+import { handleApiParts } from './routes/production.js';
 import { handleApiCompletions } from './routes/qc.js';
 import { handleAuthLogin, handleAuthLogout, handleAuthMe, handleAuthChangePassword,
          handleSimulateRoleStart, handleSimulateRoleStop } from './routes/auth.js';
@@ -36,7 +36,6 @@ const API_ROUTES = [
 
   // Parts / production
   { path: '/api/parts',             handler: (req, env) => handleApiParts(req, env) },
-  { path: '/api/combos',            handler: (req, env) => handleApiCombos(req, env) },
 
   // Jobs / shipments / manufacturing
   { path: '/api/address/validate', method: 'POST', handler: (req, env) => handleApiAddressValidate(req, env) },
@@ -283,7 +282,6 @@ export default {
 // TABLE: sessions — id, user_id, expires_at, ...
 // TABLE: roles — id, name, description, permissions (JSON), is_system, ...
 // TABLE: parts — id, part_number, name, customer, density_material, L/W/H, weight, color, category, parent_group, ...
-// TABLE: saved_combos — id, name, parts_json, ...
 // TABLE: jobs — id, customer, status, po_number, invoice_number, line_items (JSON), ship_to_*, ...
 // TABLE: job_line_items — id, job_id, part_number, description, quantity, dimensions, ...
 // TABLE: shipments — id, direction, customer, origin, destination, status, ...

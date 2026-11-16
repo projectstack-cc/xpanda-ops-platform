@@ -599,20 +599,11 @@
         <button type="button" class="btn ghost small" id="btn-edit-zones" hidden style="min-height:44px;" onclick="openZoneEditorModal(editingJobId)" data-i18n="jobs.editZones">Edit Zones</button>
       </div>
 
-      <!-- Block Calculator Combo -->
-      <div class="jobs-form-section">
-        <p class="jobs-form-section-title" data-i18n="jobs.sectionCombo">Block Calculator Combo</p>
-        <div class="jobs-combo-area" id="combo-area">
-          <button type="button" class="btn ghost small" id="btn-link-combo" data-i18n="jobs.linkCombo">Link Combo</button>
-          <span id="combo-badge-wrap" hidden></span>
-        </div>
-      </div>
-
       <!-- Trailer Group (linked jobs sharing a trailer) -->
       <div class="jobs-form-section" id="trailer-group-section" hidden>
         <p class="jobs-form-section-title" data-i18n="jobs.sectionTrailerGroup">Trailer Group</p>
         <p style="font-size:12px;color:var(--muted);margin:0 0 10px" data-i18n="jobs.trailerGroupHint">Link this job to another job shipping on the same trailer (same ship date required, up to 4 jobs). They'll appear as a linked set on the schedule board.</p>
-        <div class="jobs-combo-area" id="trailer-group-area">
+        <div class="jobs-link-area" id="trailer-group-area">
           <div id="trailer-group-members" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
           <button type="button" class="btn ghost small" id="btn-link-trailer-group" data-i18n="jobs.linkTrailerGroup">Link to Another Job</button>
           <button type="button" class="btn ghost small" id="btn-unlink-trailer-group" hidden data-i18n="jobs.unlinkTrailerGroup">Unlink from Trailer Group</button>
@@ -660,17 +651,6 @@
       <input type="text" id="parts-picker-search" placeholder="Search by part # or customer…" data-i18n-placeholder="jobs.searchPartOrCustomer">
     </div>
     <div class="jobs-picker-body" id="parts-picker-body"></div>
-  </div>
-</div>
-
-<!-- Combo picker -->
-<div class="jobs-picker-overlay" id="combo-picker" hidden>
-  <div class="jobs-picker-panel">
-    <div class="jobs-picker-header">
-      <h3 data-i18n="jobs.selectCombo">Select Combo</h3>
-      <button class="jobs-modal-close" id="combo-picker-close" aria-label="Close" data-i18n-attr="aria-label:jobs.close">&times;</button>
-    </div>
-    <div class="jobs-picker-body" id="combo-picker-body"></div>
   </div>
 </div>
 
@@ -736,8 +716,6 @@ let editingJobId     = null;
 let pendingSlip      = null;
 let pendingSlipRemoved = false;
 let originalShipTo   = null; // snapshot of loaded job's ship-to fields, for edit-change detection
-let selectedComboId  = null;
-let selectedComboName = '';
 let pendingDensityConflicts = 0; // lbz-parse-01: unresolved parse-review density conflicts; blocks saveJob() while > 0
 let parsedOffloadZonesEnabled = 0; // lbz-parse-01: offload_zones_enabled for the job currently loaded in the modal
 // lbz-parse-02: manual zone editor modal state (existing-job side; separate from the parse-review
@@ -747,7 +725,6 @@ let zoneEditorJobId     = null;
 let zoneEditorRevertFn  = null;
 let zoneEditorSavedOk   = false;
 let partsCache      = null;
-let combosCache     = null;
 let draggedId       = null;
 
 /* ═══════════════════════════════════════════
@@ -773,8 +750,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (bolModal && !bolModal.hidden) { closeBolViewModal(); return; }
     if (!document.getElementById('parts-picker').hidden) {
       document.getElementById('parts-picker').hidden = true;
-    } else if (!document.getElementById('combo-picker').hidden) {
-      document.getElementById('combo-picker').hidden = true;
     } else if (!document.getElementById('trailer-group-picker').hidden) {
       document.getElementById('trailer-group-picker').hidden = true;
     } else {
@@ -1593,7 +1568,6 @@ function setupModal() {
   const bdftConvertEl = document.getElementById('li-bdft-convert');
   if (bdftConvertEl) bdftConvertEl.addEventListener('change', (e) => toggleBdftConvert(e.target.checked));
   document.getElementById('btn-load-parts').addEventListener('click', openPartsPicker);
-  document.getElementById('btn-link-combo').addEventListener('click', openComboPicker);
   document.getElementById('btn-link-trailer-group').addEventListener('click', openTrailerGroupPicker);
   document.getElementById('btn-unlink-trailer-group').addEventListener('click', unlinkTrailerGroup);
 
@@ -1734,8 +1708,6 @@ async function confirmDiversiTechPrint() {
 
 function openModal(jobId) {
   editingJobId     = jobId;
-  selectedComboId  = null;
-  selectedComboName = '';
 
   clearForm();
 
@@ -2342,7 +2314,6 @@ function clearForm() {
   document.getElementById('hb-onhand-chunks').value = '';
   document.getElementById('hb-onhand-status').textContent = '';
 
-  clearCombo();
   clearTrailerGroup();
   hideSlipBadge();
   setModalStatus('');
@@ -2413,7 +2384,6 @@ function populateForm(job) {
   // silently clear it back to 0.
   parsedOffloadZonesEnabled = job.offload_zones_enabled ? 1 : 0;
 
-  if (job.combo_id) showComboBadge(job.combo_id, 'Linked Combo');
   renderTrailerGroupSection(job);
 
   if (job.packing_slip_filename) {
@@ -3426,33 +3396,6 @@ async function loadCutListIntoViewer() {
 }
 
 /* ═══════════════════════════════════════════
-   Combo badge
-═══════════════════════════════════════════ */
-
-function clearCombo() {
-  selectedComboId = null;
-  selectedComboName = '';
-  const wrap = document.getElementById('combo-badge-wrap');
-  wrap.hidden   = true;
-  wrap.innerHTML = '';
-  document.getElementById('btn-link-combo').hidden = false;
-}
-
-function showComboBadge(id, name) {
-  selectedComboId   = id;
-  selectedComboName = name;
-  const wrap = document.getElementById('combo-badge-wrap');
-  wrap.hidden   = false;
-  wrap.innerHTML = `
-    <span class="jobs-combo-badge">
-      <span>📦 ${esc(name)}</span>
-      <button type="button" class="jobs-combo-clear" title="Remove link">&times;</button>
-    </span>
-  `;
-  wrap.querySelector('.jobs-combo-clear').addEventListener('click', clearCombo);
-}
-
-/* ═══════════════════════════════════════════
    Trailer group (linked jobs sharing a trailer)
    trailer_group_id is a self-grouping id — NOT bols.bol_group_id (that's the inverse
    relation: one job split across several trailers/BOLs). Link/unlink fire immediately
@@ -3516,7 +3459,7 @@ function renderTrailerGroupSection(job) {
     // stops-03: read-only stops (set on the v2 board). Members arrive in stop order (unset last).
     const self = members.find(m => m.id === job.id);
     membersWrap.innerHTML = others.map(m =>
-      `<span class="jobs-combo-badge" title="${esc(m.customer || '')}">🚛 ${esc(m.invoice_number || m.customer || t('jobs.untitledJob'))}${m.trailer_stop ? ' · ' + esc(stopText(m.trailer_stop)) : ''}</span>`
+      `<span class="jobs-link-badge" title="${esc(m.customer || '')}">🚛 ${esc(m.invoice_number || m.customer || t('jobs.untitledJob'))}${m.trailer_stop ? ' · ' + esc(stopText(m.trailer_stop)) : ''}</span>`
     ).join('') +
       `<div style="flex-basis:100%;font-size:12px;color:var(--muted);margin-top:4px;">` +
       (self && self.trailer_stop ? `${esc(t('jobs.thisOrderStop', { stop: stopText(self.trailer_stop) }))} · ` : '') +
@@ -3721,7 +3664,6 @@ async function saveJob() {
     cutting_instructions: document.getElementById('f-cutting').value.trim(),
     packing_instructions: document.getElementById('f-packing').value.trim(),
     notes:                document.getElementById('f-notes').value.trim(),
-    combo_id:             selectedComboId || null,
     offload_zones_enabled: parsedOffloadZonesEnabled,
     line_items:           collectLineItems(),
     processes:            collectProcesses(),
@@ -3866,15 +3808,6 @@ function setupPickers() {
   });
   document.getElementById('parts-picker-search').addEventListener('input', filterParts);
 
-  // Combo
-  document.getElementById('combo-picker-close').addEventListener('click', () => {
-    document.getElementById('combo-picker').hidden = true;
-  });
-  document.getElementById('combo-picker').addEventListener('click', (e) => {
-    if (e.target === document.getElementById('combo-picker'))
-      document.getElementById('combo-picker').hidden = true;
-  });
-
   // Trailer group
   document.getElementById('trailer-group-picker-close').addEventListener('click', () => {
     document.getElementById('trailer-group-picker').hidden = true;
@@ -3938,41 +3871,6 @@ function renderPartsList(parts) {
         dimensions:  `${p.length_in}×${p.width_in}×${p.height_in}`,
       });
       document.getElementById('parts-picker').hidden = true;
-    });
-    body.appendChild(item);
-  }
-}
-
-async function openComboPicker() {
-  const body = document.getElementById('combo-picker-body');
-  body.innerHTML = `<p style="padding:12px;color:var(--muted)">${esc(t('jobs.loadingEllipsis'))}</p>`;
-  document.getElementById('combo-picker').hidden = false;
-
-  if (!combosCache) {
-    const r = await api.get('/api/combos');
-    if (!r.ok) {
-      body.innerHTML = `<p style="padding:12px;color:var(--muted)">${esc(t('jobs.failedToLoadCombos'))}</p>`;
-      return;
-    }
-    combosCache = r.data.combos || [];
-  }
-
-  if (!combosCache.length) {
-    body.innerHTML = `<p style="padding:12px;color:var(--muted)">${esc(t('jobs.noSavedCombos'))}</p>`;
-    return;
-  }
-
-  body.innerHTML = '';
-  for (const c of combosCache) {
-    const item = document.createElement('div');
-    item.className = 'jobs-picker-item';
-    item.innerHTML = `
-      <div style="font-weight:600;">${esc(c.name)}</div>
-      <div class="jobs-picker-item-sub">${esc(c.description || '')}${c.description ? ' · ' : ''}${c.block_l}×${c.block_w}×${c.block_h}</div>
-    `;
-    item.addEventListener('click', () => {
-      showComboBadge(c.id, c.name);
-      document.getElementById('combo-picker').hidden = true;
     });
     body.appendChild(item);
   }

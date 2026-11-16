@@ -203,9 +203,6 @@
       bdftConvertLabel: "Qty entered as BDFT — convert to pieces",
       bdftConvertTitle: "Sales sometimes enters total board feet instead of a piece count. Uses each row's Dimensions to convert BDFT → pieces.",
 
-      // Block Calculator Combo
-      sectionCombo: "Block Calculator Combo",
-      linkCombo: "Link Combo",
 
       // Trailer Group
       sectionTrailerGroup: "Trailer Group",
@@ -264,9 +261,6 @@
       loadingEllipsis: "Loading…",
       failedToLoadParts: "Failed to load parts.",
       noPartsFound: "No parts found.",
-      selectCombo: "Select Combo",
-      failedToLoadCombos: "Failed to load combos.",
-      noSavedCombos: "No saved combos.",
       linkToJob: "Link to Job",
       searchCustomerOrInvoice: "Search by customer or invoice #…",
       noEligibleJobs: "No eligible jobs on this ship date.",
@@ -548,9 +542,6 @@
       bdftConvertLabel: "Cantidad ingresada como BDFT — convertir a piezas",
       bdftConvertTitle: "Ventas a veces ingresa el total de pies de tabla en lugar de un conteo de piezas. Usa las Dimensiones de cada fila para convertir BDFT → piezas.",
 
-      // Block Calculator Combo
-      sectionCombo: "Combo de Calculadora de Bloques",
-      linkCombo: "Vincular Combo",
 
       // Trailer Group
       sectionTrailerGroup: "Grupo de Remolque",
@@ -609,9 +600,6 @@
       loadingEllipsis: "Cargando…",
       failedToLoadParts: "Error al cargar piezas.",
       noPartsFound: "No se encontraron piezas.",
-      selectCombo: "Seleccionar Combo",
-      failedToLoadCombos: "Error al cargar combos.",
-      noSavedCombos: "No hay combos guardados.",
       linkToJob: "Vincular a Trabajo",
       searchCustomerOrInvoice: "Buscar por cliente o número de factura…",
       noEligibleJobs: "No hay trabajos elegibles en esta fecha de envío.",
@@ -893,9 +881,6 @@
       bdftConvertLabel: "Kantite antre kòm BDFT — konvèti an pyès",
       bdftConvertTitle: "Pafwa Vant antre total pye planch olye yon kantite pyès. Itilize Dimansyon chak liy pou konvèti BDFT → pyès.",
 
-      // Block Calculator Combo
-      sectionCombo: "Combo Kalkilatè Blòk",
-      linkCombo: "Lye Combo",
 
       // Trailer Group
       sectionTrailerGroup: "Gwoup Kamyon Remòk",
@@ -954,9 +939,6 @@
       loadingEllipsis: "N ap chaje…",
       failedToLoadParts: "Echèk nan chaje pyès yo.",
       noPartsFound: "Pa gen pyès yo jwenn.",
-      selectCombo: "Chwazi Combo",
-      failedToLoadCombos: "Echèk nan chaje combo yo.",
-      noSavedCombos: "Pa gen combo ki sove.",
       linkToJob: "Lye ak Travay",
       searchCustomerOrInvoice: "Chèche pa kliyan oswa nimewo fakti…",
       noEligibleJobs: "Pa gen travay ki elijib nan dat ekspedisyon sa a.",

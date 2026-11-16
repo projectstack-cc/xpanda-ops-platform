@@ -33,7 +33,7 @@ function makeInput(overrides: Partial<JobCreateInput> = {}): JobCreateInput {
     customer: "Acme Roofing", po_number: "PO-1", invoice_number: "1037",
     ship_date: "", ship_day: "", location: "", delivery_time: "", method: "", carrier: "",
     load_count: 1, total_bdft: 960, scrap_pickup: "", sales_lead: "", bol_info: "", payment_info: "", notes: "",
-    cutting_instructions: "", packing_instructions: "", contact_name: "", contact_phone: "", combo_id: null,
+    cutting_instructions: "", packing_instructions: "", contact_name: "", contact_phone: "",
     priority: "", confirmed_to_ship: false, processes: [], packing_slip_pdf: null,
     packing_slip_filename: "", packing_slip_invoice: "",
     ship_to_company: "Acme Roofing", ship_to_attention: "", ship_to_street: "100 Main St", ship_to_street2: "",

@@ -90,7 +90,6 @@ export function mapInvoiceToJobInput(invoice: any, parts: Part[]): MapResult {
     packing_instructions: "",
     contact_name: "",
     contact_phone: "",
-    combo_id: null,
     priority: "normal",
     confirmed_to_ship: false,
     processes: [],

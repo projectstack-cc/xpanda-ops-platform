@@ -88,7 +88,6 @@ export async function POST(request: NextRequest) {
     packing_instructions: s(p.packing_instructions),
     contact_name: s(p.contact_name),
     contact_phone: s(p.contact_phone),
-    combo_id: p.combo_id ? s(p.combo_id) : null,
     priority: s(p.priority) === "rush" ? "rush" : "normal",
     confirmed_to_ship: !!p.confirmed_to_ship,
     processes: procsJson,
