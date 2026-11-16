@@ -30,6 +30,7 @@ export const PERMISSION_LABELS: Record<string, { group: string; label: string }>
   "qc":                             { group: "QC",            label: "Quality Control" },
   "qc.marina":                      { group: "QC",            label: "Marina Foam inspection" },
   "safety":                         { group: "Safety",        label: "Safety Portal" },
+  "safety.manage":                  { group: "Safety",        label: "Safety — Training records (view all, CSV, group sign-off)" },
   "reports":                        { group: "Reports",       label: "Reports & Analytics" },
   "orders":                         { group: "Orders",        label: "Order Entry" },
   "schedule":                       { group: "Schedule",      label: "Schedule Board (TV)" },

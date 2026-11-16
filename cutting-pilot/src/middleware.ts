@@ -58,6 +58,12 @@ const PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
   // Read-only surface: every route is GET (→ view).
   { prefix: "/v2/api/reports", keys: ["reports"] },
   { prefix: "/v2/reports", keys: ["reports"] },
+  // saf-01: v2 Safety. Hub + block pages + own-record API on legacy's `safety` key; the training-records view
+  // and its API on safety.manage (ABOVE the general rows — first match wins). Admins always pass.
+  { prefix: "/v2/api/safety/manage", keys: ["safety.manage"] },
+  { prefix: "/v2/safety/manage", keys: ["safety.manage"] },
+  { prefix: "/v2/api/safety", keys: ["safety"] },
+  { prefix: "/v2/safety", keys: ["safety"] },
   // lgx-roll-01: Invoice Analytics API (the only thing under /v2/api/logistics) opens with the dashboard.
   { prefix: "/v2/api/logistics", keys: ["logistics.dashboard"] },
   { prefix: "/v2/api/carrier", keys: ["logistics.carrier_view"] },
@@ -108,6 +114,10 @@ const PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
   { prefix: "/v2/logistics/bol-email", keys: ["logistics.bol"] },
   { prefix: "/v2/logistics", keys: ["logistics.dashboard"] },
 ];
+
+// saf-01: self-service mutations that need only VIEW on their key (the caller can only write their own row;
+// identity comes from the session). Exact paths, POST only. Keep this list tiny.
+const VIEW_LEVEL_POSTS = new Set(["/v2/api/safety/complete"]);
 
 // admin-02 — mirrors legacy ESCAPE_PREFIXES (_worker.js/index.js): a REAL administrator always passes the
 // gate on the admin surface, even while testing as a role whose permissions would deny it — otherwise an
@@ -208,7 +218,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/login.html", url.origin));
   }
 
-  const action = request.method === "GET" || request.method === "HEAD" ? "view" : "edit";
+  const action =
+    request.method === "GET" || request.method === "HEAD" ||
+    (request.method === "POST" && VIEW_LEVEL_POSTS.has(url.pathname.replace(/\/$/, "")))
+      ? "view"
+      : "edit";
   // Unmapped path (null) stays ungated as before; a mapped path passes if the user holds ANY of its keys.
   const requiredKeys = permissionKeysFor(url.pathname);
   const permitted =
@@ -262,6 +276,8 @@ export async function middleware(request: NextRequest) {
   // marina-01: Marina Foam inspection — view shows the /v2/qc entry button; edit enables inspecting.
   headers.set("X-User-Can-Marina", hasPermission(user, "qc.marina", "view") ? "1" : "0");
   headers.set("X-User-Can-Edit-Marina", hasPermission(user, "qc.marina", "edit") ? "1" : "0");
+  // saf-01: training-records view (read) + group sign-off / void (POSTs under /manage → middleware demands edit).
+  headers.set("X-User-Can-Manage-Safety", hasPermission(user, "safety.manage", "view") ? "1" : "0");
   // P439 — JSON blob of the user's merged role permissions, so legacy endpoints (e.g.
   // /api/jobs/:id/assignments, /api/jobs/:id/shifts) and the new v2 /v2/api/orders/:id/shifts
   // route can gate manager-only writes on the same blob the legacy worker already trusts.

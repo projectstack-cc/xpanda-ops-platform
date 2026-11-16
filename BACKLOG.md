@@ -153,8 +153,13 @@
 
 - [ ] i18n (en/es/ht) for /v2/admin — English-only at port time (bem-01 precedent); legacy `admin/_archived/admin-i18n.js` has the catalog to reuse.
 
-### Safety · NO v2 YET — scope separately (large)
+### Safety · v2 IN PROGRESS — saf-01 (schema, `safety.manage`, API) shipped; UI next
 
+- [ ] **saf-02 — v2 Safety hub + block pages** (`/v2/safety`, `/v2/safety/block-0N`): video players from `trainingBlocks.ts` (`mediaUrls`, poster), en/es/ht display strings, attest + `POST /v2/api/safety/complete`, own history from `GET /v2/api/safety/me`.
+- [ ] **saf-03 — training records view** (`/v2/safety/manage`): people × ready blocks grid from `manage/records`, CSV button (`manage/export`), group sign-off (`manage/group`) and void (`manage/void`) UI.
+- [ ] **saf-04 — Safety cutover** — HELD for Steve's floor test of saf-02/03: repoint links, legacy training pages → stubs.
+- [ ] **Held for saf-04:** retire legacy `/api/completions`, `safety/training/admin.html` and the `ADMIN_KEY` secret; drop the legacy `completions` table (3 rows — Steve's Feb 2026 tests).
+- Out of scope (Steve, 2026-11-16): annual refresh / required-by-role training rules.
 - [ ] Delete the `safety/sds.html` stub and the `/safety/pdfs/*` worker redirect once access logs show no hits.
 - [ ] `safety/index.html` header overflows a 390px phone by 9px (logo + language row don't wrap; the header's
   `flex:1` column needs `min-width:0`). Pre-existing, unchanged by sds-02; found in its Playwright check.
@@ -163,7 +168,6 @@
 - [ ] Optional: add sds.xpandaops.com as a custom domain on xpanda-sds. Keep xpanda-sds.pages.dev working forever
   (QR codes).
 - [ ] Finish caption translation (i18n)
-- [ ] Link user training completion to user records (depends on auth/user system)
 - [ ] **Native-speaker review pass on the Safety i18n catalog** (es/ht) — the SDS/training strings are machine-translated; given liability exposure on a safety portal this should get verified by a native speaker before being treated as authoritative. Non-blocking.
 - [ ] **Dark mode Bucket A — remaining passes** — P184 audit identified Bucket A hits in Safety (0% token adoption — highest priority), `logistics/load-builder.html` (local token system, separate batch), and `track/index.html` (standalone, no tokens.css). P186 covered all other modules. These three remain for dedicated prompts.
 
