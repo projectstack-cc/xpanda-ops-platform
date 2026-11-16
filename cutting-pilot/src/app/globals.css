@@ -247,6 +247,14 @@ html.wall-cursor-hidden * {
   .production-print-region .production-report-card { break-inside: avoid; page-break-inside: avoid; }
   .production-print-region table { width: 100% !important; font-size: 11px; border-collapse: collapse; }
   .production-print-region th, .production-print-region td { border: 1px solid #ccc; padding: 4px 6px; }
+  /* blk-02: Block Calculator — results only in one column; the desktop cut-list table even on a
+     phone (never the stacked cards); tiles and diagrams kept whole. */
+  .blockcalc-print-region .blockcalc-grid { display: block !important; }
+  .blockcalc-print-region .blockcalc-table { display: block !important; overflow: visible !important; }
+  .blockcalc-print-region .blockcalc-table table { min-width: 0 !important; font-size: 11px; }
+  .blockcalc-print-region .blockcalc-cards { display: none !important; }
+  .blockcalc-print-region .blockcalc-avoid { break-inside: avoid; page-break-inside: avoid; }
+  .blockcalc-print-region .blockcalc-diagram-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
 }
 
 /* mobile-zoom-01: iOS Safari auto-zooms the page when a form field under 16px gets focus, and the

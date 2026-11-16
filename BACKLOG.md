@@ -124,7 +124,7 @@
 - [ ] BOL Email v2 i18n (es/ht) — English-only in bem-01.
 - [ ] tls-01's `nextShipDay` (to-load sheets) could reuse `lib/logistics/bolEmail.ts`'s holiday-aware `nextShippingDateStr` — plant_holidays now has a v2 owner.
 
-### Manufacturing calculators · Block Calculator in progress (blk-01 shipped; blk-02, blk-03 open)
+### Manufacturing calculators · Block Calculator in progress (blk-01, blk-02 shipped; blk-03 open)
 
 - [ ] Port `manufacturing/block-calculator.html` (general block nesting; `/v2/blocks` covers taper only).
 - [ ] Delete the `manufacturing/holey-board-calculator.html` redirect stub once access logs show no hits (hb-archive-01; original kept in `manufacturing/_archived/`).
@@ -269,7 +269,6 @@
 
 ## Manufacturing / Cutting (React pilot)
 
-- [ ] **blk-02 — Block Calculator diagrams, print, XLSX.** SVG cut diagrams Front (W×H) / Top (L×W) / Side (L×H) with tap-to-zoom (legacy `drawBlockView` canvas → SVG, tokens), Print cut list (+ "include diagrams"), and Export XLSX matching legacy `buildAndDownloadXlsx`. Replaces blk-01's "come next" line on `/v2/blocks/calculator`.
 - [ ] **blk-03 — Block Calculator cutover.** Manufacturing home tile + `PlatformHeader` nav entry under `manufacturing.calculators`; legacy `manufacturing/block-calculator.html` → redirect stub (original to `_archived/`); retire `/api/combos` + the `saved_combos` table (0 rows). The prod drop goes through the D1 connector with Steve's OK.
 
 - [ ] **cutting-ids-01 follow-up — after deploy, re-run the orphan count; new orphans should be 0**
@@ -690,7 +689,7 @@ schedule badge):**
 - [ ] Units/hour throughput once qty entry is routine (qty_done_delta + qty_target) — pair with first-pass yield
 - [ ] Throughput/time-tracking report surface (per-line bottleneck rollups across jobs/date range) if a separate analytics view is wanted beyond the on-board badges
 - [ ] Cutting v2: port the settings gear into `PlatformHeader` (deferred from P212). The notifications-bell half shipped in notif-bell-01 (`NotificationBell.tsx` mounts the shared `/shared/notif-bell.js`).
-- [ ] Block-calc engine landed as a pure module in P228 (`blockEngine.ts`) + save route + `blocks_needed`; the operator calculator screen is the blk series (blk-01 shipped `/v2/blocks/calculator`; blk-02 diagrams/print/XLSX, blk-03 cutover). Remaining: the planner screen (P229), non-taper chunk model, per-job block-dimension defaults, regenerate-on-change.
+- [ ] Block-calc engine landed as a pure module in P228 (`blockEngine.ts`) + save route + `blocks_needed`; the operator calculator screen is the blk series (blk-01 shipped `/v2/blocks/calculator`, blk-02 shipped diagrams/print/XLSX; blk-03 cutover open). Remaining: the planner screen (P229), non-taper chunk model, per-job block-dimension defaults, regenerate-on-change.
 - [ ] Taper blocks-needed (materials pull): compute `ceil(chunks ÷ chunks-per-block)` once a chunks-per-block datum exists.
 - [ ] Verify the live `job_line_items.dimensions` taper format matches the P227 regex; widen if needed.
 - [ ] Structured taper/chunk geometry capture (chunk L×W×H + kerf) to compute yield instead of manual entry.

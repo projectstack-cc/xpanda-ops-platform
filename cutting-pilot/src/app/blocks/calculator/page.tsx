@@ -23,13 +23,16 @@ export default async function BlockCalculatorPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-bg text-text">
-      <PlatformHeader
-        userName={userName}
-        isAdmin={isAdmin}
-        permissions={permissions}
-        currentPath="/v2/blocks/calculator"
-        title="Block Calculator · v2"
-      />
+      {/* blk-02: the print-out is the results only. */}
+      <div className="no-print">
+        <PlatformHeader
+          userName={userName}
+          isAdmin={isAdmin}
+          permissions={permissions}
+          currentPath="/v2/blocks/calculator"
+          title="Block Calculator · v2"
+        />
+      </div>
       <BlockCalculator />
     </div>
   );

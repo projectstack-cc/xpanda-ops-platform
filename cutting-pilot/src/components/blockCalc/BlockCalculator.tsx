@@ -8,15 +8,21 @@
 // row per axis with n > 0. State is in-memory only (legacy keeps nothing).
 // Narrow fallback (< 768px): one column; Secondary parts + Options collapse to a one-line summary,
 // Calculate is full width under the inputs, the cut list renders as stacked cards.
-import { useRef, useState, type ReactNode } from "react";
-import { ChevronDown, Library, Plus, X } from "lucide-react";
+// blk-02: cut diagrams (BlockDiagrams.tsx), Print cut list (window.print over the
+// .blockcalc-print-region rules in globals.css; prints in the light theme) and Export XLSX
+// (lib/blockCalc/xlsx.ts). Export and print read the CalcView snapshot taken at Calculate, never
+// the live inputs.
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ChevronDown, FileSpreadsheet, Library, Plus, Printer, X } from "lucide-react";
 import { useLang } from "@/components/lang";
 import LangSelect from "@/components/LangSelect";
 import MetricTile from "@/components/dashboard/MetricTile";
 import SearchPickerModal, { type SearchPickerItem } from "@/components/SearchPickerModal";
 import { loadPartsLibrary } from "@/lib/partsCache";
 import type { Part } from "@/lib/partMatch";
-import { runFullCalc, type BlockCalcResult, type OrientationMode } from "@/lib/blockEngine";
+import { runFullCalc, type BlockCalcInput, type BlockCalcResult, type OrientationMode } from "@/lib/blockEngine";
+import BlockDiagrams from "@/components/blockCalc/BlockDiagrams";
+import { buildBlockCalcSheets, buildPartsMeta, buildXlsxMeta, downloadBlockCalcXlsx } from "@/lib/blockCalc/xlsx";
 import {
   buildCutListRows,
   orientNote,
@@ -88,6 +94,7 @@ interface LibPick {
   part_number: string;
   name: string;
   customer: string;
+  density_material: string;
 }
 
 interface SecState {
@@ -103,6 +110,11 @@ interface SecState {
 interface CalcView {
   calc: BlockCalcResult;
   rows: CutListRow[];
+  // Snapshot at Calculate, for XLSX (legacy lastCalcInput + lib picks).
+  input: BlockCalcInput;
+  routing: Routing;
+  primaryLib: LibPick | null;
+  secLibs: Record<string, LibPick | null>;
 }
 
 // ─── small kit pieces ───────────────────────────────────────────────────────
@@ -233,8 +245,52 @@ export default function BlockCalculator() {
   const [parts, setParts] = useState<Part[] | null>(null);
   const [partsError, setPartsError] = useState<string | null>(null);
 
+  const [includeDiagrams, setIncludeDiagrams] = useState(true);
+  const [printDate, setPrintDate] = useState("");
+
   const resultsRef = useRef<HTMLElement>(null);
   const blockLRef = useRef<HTMLDivElement>(null);
+
+  // Print on paper in the light theme (v2 defaults to dark; its light text would vanish on white),
+  // whether printing starts from the button or the browser's own Print. Restored afterwards.
+  useEffect(() => {
+    let prevTheme: string | null = null;
+    const before = () => {
+      setPrintDate(new Date().toLocaleDateString());
+      prevTheme = document.documentElement.getAttribute("data-theme");
+      document.documentElement.setAttribute("data-theme", "light");
+    };
+    const after = () => {
+      if (prevTheme !== null) document.documentElement.setAttribute("data-theme", prevTheme);
+      prevTheme = null;
+    };
+    window.addEventListener("beforeprint", before);
+    window.addEventListener("afterprint", after);
+    return () => {
+      window.removeEventListener("beforeprint", before);
+      window.removeEventListener("afterprint", after);
+    };
+  }, []);
+
+  function printCutList() {
+    setPrintDate(new Date().toLocaleDateString());
+    window.print();
+  }
+
+  async function exportXlsx() {
+    if (!view) return;
+    const { calc, rows, input, routing: r, primaryLib: pl, secLibs } = view;
+    const sheets = buildBlockCalcSheets(
+      rows,
+      buildPartsMeta(calc, input, pl, secLibs),
+      buildXlsxMeta(calc, input, r, new Date().toLocaleDateString())
+    );
+    try {
+      await downloadBlockCalcXlsx(sheets);
+    } catch (e) {
+      console.error("blockCalc xlsx export failed", e);
+    }
+  }
 
   // ── block size ──
   function pickPreset(p: (typeof PRESETS)[number]) {
@@ -292,6 +348,7 @@ export default function BlockCalculator() {
       part_number: part.part_number,
       name: part.name ?? "",
       customer: part.customer ?? "",
+      density_material: part.density_material ?? "",
     };
     const L = String(part.length_in), W = String(part.width_in), H = String(part.height_in);
     if (pickFor === "primary") {
@@ -328,10 +385,17 @@ export default function BlockCalculator() {
       return;
     }
     const primaryRef: LibPartRef | null = primaryLib;
-    const secRefs: Record<string, LibPartRef | null> = {};
+    const secRefs: Record<string, LibPick | null> = {};
     for (const s of secs) secRefs[s.id] = s.lib;
     setError(null);
-    setView({ calc, rows: buildCutListRows(calc, routing, primaryRef, secRefs) });
+    setView({
+      calc,
+      rows: buildCutListRows(calc, routing, primaryRef, secRefs),
+      input: res.input,
+      routing,
+      primaryLib,
+      secLibs: secRefs,
+    });
     if (window.innerWidth <= 640) {
       setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
     }
@@ -384,8 +448,8 @@ export default function BlockCalculator() {
   );
 
   return (
-    <main className="flex-1 w-full max-w-screen-2xl mx-auto px-4 py-5 space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <main className="blockcalc-print-region flex-1 w-full max-w-screen-2xl mx-auto px-4 py-5 space-y-5">
+      <div className="no-print flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-xl font-bold tracking-tight text-text">{t("blockCalc.bcBarTitle")}</h1>
           <p className="text-sm text-muted">{t("blockCalc.pageSubtitle")}</p>
@@ -396,12 +460,12 @@ export default function BlockCalculator() {
         </div>
       </div>
 
-      <div className="grid gap-5 md:grid-cols-[minmax(0,360px)_minmax(0,1fr)] lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)] items-start">
+      <div className="blockcalc-grid grid gap-5 md:grid-cols-[minmax(0,360px)_minmax(0,1fr)] lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)] items-start">
         {/* ── inputs ── */}
         <form
           id="blockcalc-form"
           aria-label="Inputs"
-          className="space-y-4 min-w-0"
+          className="no-print space-y-4 min-w-0"
           onSubmit={(e) => {
             e.preventDefault();
             calculate();
@@ -610,12 +674,20 @@ export default function BlockCalculator() {
         {/* ── results ── */}
         <section ref={resultsRef} aria-label={t("blockCalc.resultsTitle")} className="space-y-4 min-w-0 scroll-mt-4">
           {error && (
-            <div role="alert" className="rounded-xl border border-[var(--danger-ink)] bg-surface px-4 py-3 text-sm font-semibold text-[var(--danger-ink)]">
+            <div role="alert" className="no-print rounded-xl border border-[var(--danger-ink)] bg-surface px-4 py-3 text-sm font-semibold text-[var(--danger-ink)]">
               {error}
             </div>
           )}
           {view ? (
-            <Results view={view} t={t} />
+            <Results
+              view={view}
+              t={t}
+              includeDiagrams={includeDiagrams}
+              onIncludeDiagrams={setIncludeDiagrams}
+              onPrint={printCutList}
+              onExport={exportXlsx}
+              printDate={printDate}
+            />
           ) : (
             !error && (
               <div className="rounded-xl border border-dashed border-[var(--border)] bg-surface p-10 text-center text-sm text-muted">
@@ -626,6 +698,7 @@ export default function BlockCalculator() {
         </section>
       </div>
 
+      <div className="no-print">
       <SearchPickerModal
         isOpen={pickFor !== null}
         onClose={() => setPickFor(null)}
@@ -637,13 +710,30 @@ export default function BlockCalculator() {
         emptyText={t("blockCalc.noPartsMatch")}
         searchPlaceholder={t("blockCalc.partsSearchPlaceholder")}
       />
+      </div>
     </main>
   );
 }
 
 // ─── results ────────────────────────────────────────────────────────────────
 
-function Results({ view, t }: { view: CalcView; t: (key: string) => string }) {
+function Results({
+  view,
+  t,
+  includeDiagrams,
+  onIncludeDiagrams,
+  onPrint,
+  onExport,
+  printDate,
+}: {
+  view: CalcView;
+  t: (key: string) => string;
+  includeDiagrams: boolean;
+  onIncludeDiagrams: (on: boolean) => void;
+  onPrint: () => void;
+  onExport: () => void;
+  printDate: string;
+}) {
   const { calc, rows } = view;
   const s = stats(calc);
   const note = orientNote(calc);
@@ -682,6 +772,9 @@ function Results({ view, t }: { view: CalcView; t: (key: string) => string }) {
 
   return (
     <>
+      <div className="print-only text-sm" data-testid="print-header">
+        <strong>{t("blockCalc.printHeaderBlock")}</strong> | {printDate}
+      </div>
       {note && (
         <div className="rounded-xl border border-[var(--info-border)] bg-[var(--info-bg)] text-[var(--info-text)] px-4 py-3 text-sm">
           {note === "identity"
@@ -696,7 +789,7 @@ function Results({ view, t }: { view: CalcView; t: (key: string) => string }) {
         </div>
       )}
 
-      <div className={CARD}>
+      <div className={`${CARD} blockcalc-avoid`}>
         <h2 className={H2}>{t("blockCalc.resultsTitle")}</h2>
         <div className="grid grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3">
           <MetricTile label={t("blockCalc.statPartsPerBlock")} value={n(s.partsPerBlock)} caption={`${s.nL} × ${s.nW} × ${s.nH}`} />
@@ -743,7 +836,28 @@ function Results({ view, t }: { view: CalcView; t: (key: string) => string }) {
 
       <div className="rounded-xl border border-[var(--card-border)] bg-surface overflow-hidden">
         <div className="px-4 py-3 border-b border-[var(--line)] space-y-1">
-          <h2 className="text-sm font-bold text-text">{t("blockCalc.cutListTitle")}</h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-bold text-text">{t("blockCalc.cutListTitle")}</h2>
+            <div className="no-print flex flex-wrap items-center gap-2" data-testid="results-toolbar">
+              <label className="inline-flex items-center gap-2 min-h-[44px] px-1 text-sm text-text cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={includeDiagrams}
+                  onChange={(e) => onIncludeDiagrams(e.target.checked)}
+                  className="w-5 h-5 accent-[var(--brand)] cursor-pointer"
+                />
+                {t("blockCalc.includeDiagramsPrint")}
+              </label>
+              <button type="button" onClick={onPrint} className={GHOST_BTN}>
+                <Printer size={14} className="text-muted" aria-hidden="true" />
+                {t("blockCalc.printCutListBtn")}
+              </button>
+              <button type="button" onClick={onExport} className={GHOST_BTN}>
+                <FileSpreadsheet size={14} className="text-muted" aria-hidden="true" />
+                {t("blockCalc.exportXlsxBtn")}
+              </button>
+            </div>
+          </div>
           {note && note !== "identity" && (
             <p className="text-xs text-muted">
               {fmt(t("blockCalc.orientMapNote"), { axisL: axis(note.L.name), axisW: axis(note.W.name), axisH: axis(note.H.name) })}
@@ -752,7 +866,7 @@ function Results({ view, t }: { view: CalcView; t: (key: string) => string }) {
         </div>
 
         {/* md+: table in a horizontal-scroll box */}
-        <div className="hidden md:block overflow-x-auto">
+        <div className="blockcalc-table hidden md:block overflow-x-auto">
           <table className="w-full min-w-[640px] text-sm">
             <thead>
               <tr className="border-b border-[var(--line)] bg-[var(--ghost-bg)] text-left text-xs font-semibold text-muted">
@@ -782,7 +896,7 @@ function Results({ view, t }: { view: CalcView; t: (key: string) => string }) {
         </div>
 
         {/* < md: stacked cards */}
-        <ol className="md:hidden">
+        <ol className="blockcalc-cards md:hidden">
           {rows.map((r) => (
             <li key={r.step} data-testid="cut-card" className="px-4 py-3 border-t border-[var(--line)] first:border-t-0 space-y-1">
               <div className="flex items-center justify-between gap-2">
@@ -803,7 +917,7 @@ function Results({ view, t }: { view: CalcView; t: (key: string) => string }) {
         </ol>
       </div>
 
-      <p className="text-sm text-muted">{t("blockCalc.comingNext")}</p>
+      <BlockDiagrams calc={calc} t={t} printHidden={!includeDiagrams} />
     </>
   );
 }
