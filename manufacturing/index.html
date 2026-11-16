@@ -21,7 +21,7 @@
     <p class="mfg-section-subtitle" data-i18n="manufacturing.sectionSubtitle">Select a tool to begin</p>
   </div>
 
-  <a class="mfg-tile" href="/manufacturing/block-calculator.html">
+  <a class="mfg-tile" href="/v2/blocks/calculator">
     <h2 data-i18n="manufacturing.blockCalcTitle">Block Calculator</h2>
     <p data-i18n="manufacturing.blockCalcDesc">Calculate parts per block, generate cut lists, and visualize cut layouts</p>
   </a>
@@ -62,7 +62,8 @@ async function gateMfgNav() {
     if (!user || user.isAdministrator) return;
     const perms = user.permissions || {};
     if (!perms['manufacturing.calculators']?.view) {
-      document.querySelectorAll('a[href*="block-calculator"], a[href*="holey-board"]').forEach(el => el.style.display = 'none');
+      // blk-03: exact v2 path, so the Taper tile (/v2/blocks) is never caught.
+      document.querySelectorAll('a[href*="/v2/blocks/calculator"]').forEach(el => el.style.display = 'none');
     }
     if (!perms['manufacturing.cutting']?.view) {
       document.querySelectorAll('.mfg-cutting-link').forEach(el => el.style.display = 'none');

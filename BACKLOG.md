@@ -124,9 +124,10 @@
 - [ ] BOL Email v2 i18n (es/ht) — English-only in bem-01.
 - [ ] tls-01's `nextShipDay` (to-load sheets) could reuse `lib/logistics/bolEmail.ts`'s holiday-aware `nextShippingDateStr` — plant_holidays now has a v2 owner.
 
-### Manufacturing calculators · Block Calculator in progress (blk-01, blk-02 shipped; blk-03 open)
+### Manufacturing calculators · CUT OVER (blk-03)
 
-- [ ] Port `manufacturing/block-calculator.html` (general block nesting; `/v2/blocks` covers taper only).
+- [ ] Delete the `manufacturing/block-calculator.html` redirect stub once access logs show no hits (same rule as the holey-board stub).
+- [ ] `manufacturing/manufacturing-i18n.js`: the Manufacturing home still uses its `blockCalc*` tile keys, so the file stays; the old block-calculator page keys can go with the Manufacturing home's own port.
 - [ ] Delete the `manufacturing/holey-board-calculator.html` redirect stub once access logs show no hits (hb-archive-01; original kept in `manufacturing/_archived/`).
 
 ### QC · v2 COMPLETE at /v2/qc (qc-01..08)
@@ -268,7 +269,7 @@
 
 ## Manufacturing / Cutting (React pilot)
 
-- [ ] **blk-03 — Block Calculator cutover.** Manufacturing home tile + `PlatformHeader` nav entry under `manufacturing.calculators`; legacy `manufacturing/block-calculator.html` → redirect stub (original to `_archived/`); retire `/api/combos` + the `saved_combos` table (0 rows). The prod drop goes through the D1 connector with Steve's OK.
+- [ ] **Saved combos retirement — decided (Steve, 2026-11-16): combo-01** removes Job Board "Link combo" (v2 + Classic) and `/api/combos`; runs right after blk-03.
 
 - [ ] **cutting-ids-01 follow-up — after deploy, re-run the orphan count; new orphans should be 0**
   (`SELECT COUNT(*) FROM cutting_line_progress clp WHERE NOT EXISTS (SELECT 1 FROM job_line_items li WHERE li.id = clp.line_item_id)` — baseline 311 on 2026-10-06).

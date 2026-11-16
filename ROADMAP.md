@@ -14,8 +14,8 @@ over, and archived. Then the legacy `_worker.js` and the Cloudflare Pages projec
 
 | Status | Modules |
 |---|---|
-| **Done** | Admin · QC · Reports · Dock Loading · BOL Email · Production |
-| **In progress** | Block Calculator (blk-01 shipped; blk-02, blk-03 open) |
+| **Done** | Admin · QC · Reports · Dock Loading · BOL Email · Production · Block Calculator (blk-01..03) |
+| **In progress** | — |
 | **On hold — floor / stakeholder sign-off** | Load Builder (lbr-11 cutover) · Job Board Classic · Logistics Classic |
 | **Not started** | Safety training (the SDS browser stays standalone at xpanda-sds) · Shell, auth & worker (last) |
 
