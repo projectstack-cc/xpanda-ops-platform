@@ -278,6 +278,8 @@ export async function middleware(request: NextRequest) {
   headers.set("X-User-Can-Edit-Marina", hasPermission(user, "qc.marina", "edit") ? "1" : "0");
   // saf-01: training-records view (read) + group sign-off / void (POSTs under /manage → middleware demands edit).
   headers.set("X-User-Can-Manage-Safety", hasPermission(user, "safety.manage", "view") ? "1" : "0");
+  // saf-03: edit level — group sign-off + void UI (the routes are POSTs under /manage, so middleware already demands edit).
+  headers.set("X-User-Can-Edit-Safety-Manage", hasPermission(user, "safety.manage", "edit") ? "1" : "0");
   // P439 — JSON blob of the user's merged role permissions, so legacy endpoints (e.g.
   // /api/jobs/:id/assignments, /api/jobs/:id/shifts) and the new v2 /v2/api/orders/:id/shifts
   // route can gate manager-only writes on the same blob the legacy worker already trusts.

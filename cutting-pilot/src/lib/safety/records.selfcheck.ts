@@ -1,6 +1,6 @@
 // saf-01 selfcheck: `npx tsx src/lib/safety/records.selfcheck.ts` (from cutting-pilot/).
 import {
-  latestByUserBlock, summarize, toCsv, csvCell, CSV_HEADER, isValidYmd, etToday, canManageSafety, insertSelfIfAbsentStmt,
+  latestByUserBlock, summarize, toCsv, csvCell, CSV_HEADER, isValidYmd, etToday, canManageSafety, insertSelfIfAbsentStmt, listPersonCompletions,
   type CompletionRow, type CsvRow,
 } from "./records";
 
@@ -144,6 +144,25 @@ async function sqliteChecks() {
   mem.exec("UPDATE safety_training_completions SET voided_at = '2026-11-16 12:00:00' WHERE id = 's1'");
   check("race: a VOIDED self row doesn't block a new one", (await ins("2026-11-16")).meta.changes === 1);
   check("race: row count", count() === 8, String(count()));
+
+  // ── saf-03: listPersonCompletions ordering (voided included; newest completed_on, then newest created_at) ──
+  const put = (id: string, user: string, block: string, on: string, created: string, voided: string | null = null) =>
+    mem.prepare(`INSERT INTO safety_training_completions (id,user_id,user_name,block_id,completed_on,source,recorded_by_id,recorded_by_name,voided_at,created_at)
+                 VALUES (?,?,'P',?,?,'self',?, 'P', ?, ?)`).run(id, user, block, on, user, voided, created);
+  put("p-old", "p1", "block-01", "2026-10-01", "2026-11-10 09:00:00");
+  put("p-new", "p1", "block-02", "2026-11-12", "2026-11-12 08:00:00");
+  put("p-tie-a", "p1", "block-03", "2026-11-05", "2026-11-05 08:00:00");
+  put("p-tie-b", "p1", "block-01", "2026-11-05", "2026-11-05 10:00:00");
+  put("p-void", "p1", "block-04", "2026-11-08", "2026-11-08 09:00:00", "2026-11-08 12:00:00");
+  put("other", "p2", "block-01", "2026-11-20", "2026-11-20 09:00:00");
+  const d1all: any = {
+    prepare: (sql: string) => ({ bind: (...args: unknown[]) => ({ all: async () => ({ results: mem.prepare(sql).all(...args).map((r: any) => ({ ...r })) }) }) }),
+  };
+  const person = await listPersonCompletions(d1all, "p1");
+  check("person: newest completed_on first, created_at breaks a tie, voided included, only that user",
+    person.map((r) => r.id).join(",") === "p-new,p-void,p-tie-b,p-tie-a,p-old", person.map((r) => r.id).join(","));
+  check("person: voided row carries voided_at", person.find((r) => r.id === "p-void")?.voided_at === "2026-11-08 12:00:00");
+  check("person: unknown user → []", (await listPersonCompletions(d1all, "nobody")).length === 0);
 }
 
 sqliteChecks()

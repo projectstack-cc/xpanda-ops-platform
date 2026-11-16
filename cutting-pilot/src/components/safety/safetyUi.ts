@@ -37,3 +37,16 @@ export async function fetchMe(): Promise<MeResponse> {
   if (!res.ok || !json?.ok) throw new Error(`me ${res.status}`);
   return json;
 }
+
+// saf-03: /v2/api/safety/manage/records payload.
+export interface RecordsBlock { id: string; n: string; titleEn: string; minutes: number }
+export interface RecordsPerson { user_id: string; name: string; username: string; roles: string }
+export type LatestMapJson = Record<string, Record<string, { completed_on: string; source: "self" | "group" }>>;
+export interface RecordsData {
+  blocks: RecordsBlock[];
+  people: RecordsPerson[];
+  latest: LatestMapJson;
+  summary: { people: number; allDone: number; noneYet: number; thisMonth: { completions: number; group: number } };
+}
+
+export const splitRoles = (roles: string) => roles.split(",").map((r) => r.trim()).filter(Boolean);

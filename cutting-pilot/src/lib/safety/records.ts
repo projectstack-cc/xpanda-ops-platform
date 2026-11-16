@@ -217,6 +217,19 @@ export async function listUserCompletions(db: D1Database, userId: string): Promi
   return (r.results ?? []) as CompletionRow[];
 }
 
+/**
+ * saf-03: every completion for one person, voided included (the client filters), newest completed_on then newest
+ * created_at first (id breaks a full tie so the order is stable).
+ */
+export const PERSON_COMPLETIONS_SQL = `SELECT ${COLS} FROM safety_training_completions
+  WHERE user_id = ?
+  ORDER BY completed_on DESC, created_at DESC, id DESC`;
+
+export async function listPersonCompletions(db: D1Database, userId: string): Promise<CompletionRow[]> {
+  const r = await db.prepare(PERSON_COMPLETIONS_SQL).bind(userId).all<CompletionRow>();
+  return (r.results ?? []) as CompletionRow[];
+}
+
 /** Full history for CSV, newest first, with the person's current username and role names. */
 export async function listCsvRows(db: D1Database, includeVoided: boolean): Promise<CsvRow[]> {
   const r = await db

@@ -153,12 +153,11 @@
 
 - [ ] i18n (en/es/ht) for /v2/admin — English-only at port time (bem-01 precedent); legacy `admin/_archived/admin-i18n.js` has the catalog to reuse.
 
-### Safety · v2 IN PROGRESS — saf-01 (schema, `safety.manage`, API) + saf-02 (hub + block pages, direct URL) shipped
+### Safety · v2 IN PROGRESS — saf-01 (schema, `safety.manage`, API), saf-02 (hub + block pages) and saf-03 (training records) shipped, direct URL only
 
-- [ ] **saf-03 — training records view** (`/v2/safety/manage`): people × ready blocks grid from `manage/records`, CSV button (`manage/export`), group sign-off (`manage/group`) and void (`manage/void`) UI.
 - [ ] **saf-04 — Safety cutover** — HELD for Steve's floor test of saf-02/03: repoint links, legacy training pages → stubs.
 - [ ] **At saf-04:** PlatformHeader's Safety nav item still links legacy `/safety/`, so `/v2/safety` pages don't highlight it — repoint it to `/v2/safety` with the cutover (found in saf-02).
-- [ ] **Native-speaker review — saf-02 strings:** the NEW es/ht `safety.*` keys and `lib/safety/blockText.ts` (topics, video titles/descriptions, HT block titles) are machine-translated; list in CHANGELOG saf-02. HT dates use French month names (no ICU `ht` locale).
+- [ ] **Native-speaker review — saf-02/03 strings:** the NEW es/ht `safety.*` and `safety.records.*` keys and `lib/safety/blockText.ts` (topics, video titles/descriptions, HT block titles) are machine-translated; lists in CHANGELOG saf-02 and saf-03. HT dates use French month names (no ICU `ht` locale).
 - [ ] **Held for saf-04:** retire legacy `/api/completions`, `safety/training/admin.html` and the `ADMIN_KEY` secret; drop the legacy `completions` table (3 rows — Steve's Feb 2026 tests).
 - Out of scope (Steve, 2026-11-16): annual refresh / required-by-role training rules.
 - [ ] Delete the `safety/sds.html` stub and the `/safety/pdfs/*` worker redirect once access logs show no hits.
