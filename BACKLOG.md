@@ -214,7 +214,6 @@
 - [ ] Report: consider moving stats server-side if filtered ranges regularly hit the
   5,000-row cap.
 
-- [ ] **Orchestrator data step (after cleanup-01 deploys):** DROP the empty v1 `bead_transactions`, `silos`, `bead_types` (0 rows; their last writer was removed in cleanup-01) and strip `logistics.v2` from the two roles that still carry it, through the D1 connector with Steve's OK. Record it under cleanup-01 in CHANGELOG.
 - [ ] Silo aging: display-only "time since full" ships in prod-b-03; enforce a minimum age
   before molding once the plant has a confirmed aging target (see eps-engineer-agent §6.6).
 
