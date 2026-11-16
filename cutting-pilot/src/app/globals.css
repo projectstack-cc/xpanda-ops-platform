@@ -37,6 +37,9 @@
      and only go on their matching --*-bg. Guarded by scripts/check-on-color-tokens.mjs. */
   --danger-ink: #b91c1c;
   --success-ink: #15803d;
+  /* saf-02: pale danger surface (Safety emergency strip). Text on it = --danger-ink. */
+  --danger-soft-bg: #fef2f2;
+  --danger-soft-border: #fecaca;
 
   /* Links + banners */
   --link: #0074cc;
@@ -124,6 +127,8 @@
   --success-text: #ffffff;
   --danger-ink: #f87171;
   --success-ink: #4ade80;
+  --danger-soft-bg: rgba(239, 68, 68, 0.12);
+  --danger-soft-border: rgba(239, 68, 68, 0.40);
 
   --link: #60a5fa;
   --info-bg: rgba(59, 130, 246, 0.12);

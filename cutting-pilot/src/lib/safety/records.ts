@@ -251,6 +251,28 @@ export function insertCompletionStmt(
           row.recorded_by_id, row.recorded_by_name, row.note);
 }
 
+/**
+ * saf-02: self completion, inserted only if the caller has no non-voided `self` row for that block on that date.
+ * ONE statement (INSERT … SELECT … WHERE NOT EXISTS), so two simultaneous taps can't both insert — SQLite/D1 run a
+ * single statement atomically. `meta.changes === 0` → already recorded (the route answers 409 already_today).
+ */
+export function insertSelfIfAbsentStmt(
+  db: D1Database,
+  row: Pick<CompletionRow, "id" | "user_id" | "user_name" | "block_id" | "completed_on" | "recorded_by_id" | "recorded_by_name">
+) {
+  return db
+    .prepare(
+      `INSERT INTO safety_training_completions
+         (id, user_id, user_name, block_id, completed_on, source, recorded_by_id, recorded_by_name, note, attested)
+       SELECT ?, ?, ?, ?, ?, 'self', ?, ?, NULL, 1
+        WHERE NOT EXISTS (
+          SELECT 1 FROM safety_training_completions
+           WHERE user_id = ? AND block_id = ? AND completed_on = ? AND source = 'self' AND voided_at IS NULL)`
+    )
+    .bind(row.id, row.user_id, row.user_name, row.block_id, row.completed_on, row.recorded_by_id, row.recorded_by_name,
+          row.user_id, row.block_id, row.completed_on);
+}
+
 export async function getCompletion(db: D1Database, id: string): Promise<CompletionRow | null> {
   return (await db.prepare(`SELECT ${COLS} FROM safety_training_completions WHERE id = ?`).bind(id).first<CompletionRow>()) ?? null;
 }

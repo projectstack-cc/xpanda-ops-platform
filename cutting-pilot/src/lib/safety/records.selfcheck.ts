@@ -1,6 +1,6 @@
 // saf-01 selfcheck: `npx tsx src/lib/safety/records.selfcheck.ts` (from cutting-pilot/).
 import {
-  latestByUserBlock, summarize, toCsv, csvCell, CSV_HEADER, isValidYmd, etToday, canManageSafety,
+  latestByUserBlock, summarize, toCsv, csvCell, CSV_HEADER, isValidYmd, etToday, canManageSafety, insertSelfIfAbsentStmt,
   type CompletionRow, type CsvRow,
 } from "./records";
 
@@ -101,5 +101,54 @@ check("canManageSafety header", canManageSafety(h({ "X-User-Can-Manage-Safety": 
 check("canManageSafety admin", canManageSafety(h({ "X-User-Is-Admin": "1" })));
 check("canManageSafety neither", !canManageSafety(h({ "X-User-Can-Manage-Safety": "0", "X-User-Is-Admin": "0" })));
 
-console.log(`records selfcheck: ${pass}/${pass + fail} passed`);
-if (fail) process.exit(1);
+// ── saf-02: insertSelfIfAbsentStmt against an in-memory SQLite copy of the saf-01 DDL ──
+// node:sqlite (Node ≥ 22.5) has no @types here, so it's loaded by a computed specifier; a 6-line D1 shim adapts it.
+const STC_DDL = `CREATE TABLE safety_training_completions (
+  id TEXT PRIMARY KEY, user_id TEXT NOT NULL, user_name TEXT NOT NULL, block_id TEXT NOT NULL, completed_on TEXT NOT NULL,
+  source TEXT NOT NULL CHECK (source IN ('self','group')), recorded_by_id TEXT NOT NULL, recorded_by_name TEXT NOT NULL,
+  note TEXT, attested INTEGER NOT NULL DEFAULT 1 CHECK (attested IN (0,1)), voided_at TEXT, voided_by_name TEXT,
+  void_reason TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')));
+CREATE INDEX idx_stc_user_block ON safety_training_completions(user_id, block_id);
+CREATE INDEX idx_stc_block_date ON safety_training_completions(block_id, completed_on);`;
+
+async function sqliteChecks() {
+  const spec = "node:sqlite";
+  const { DatabaseSync } = (await import(spec)) as any;
+  const mem = new DatabaseSync(":memory:");
+  mem.exec(STC_DDL);
+  const d1: any = {
+    prepare: (sql: string) => ({
+      bind: (...args: unknown[]) => ({
+        run: async () => ({ meta: { changes: Number(mem.prepare(sql).run(...args).changes) } }),
+      }),
+    }),
+  };
+  let n = 0;
+  const ins = (completed_on: string, user_id = "u1", block_id = "block-01") =>
+    insertSelfIfAbsentStmt(d1, {
+      id: `s${++n}`, user_id, user_name: "User One", block_id, completed_on, recorded_by_id: user_id, recorded_by_name: "User One",
+    }).run();
+  const count = () => Number(mem.prepare("SELECT count(*) AS c FROM safety_training_completions").get().c);
+
+  check("race: first insert changes 1", (await ins("2026-11-16")).meta.changes === 1);
+  check("race: same user/block/date changes 0", (await ins("2026-11-16")).meta.changes === 0);
+  check("race: different date changes 1", (await ins("2026-11-17")).meta.changes === 1);
+  check("race: other block same date changes 1", (await ins("2026-11-16", "u1", "block-02")).meta.changes === 1);
+  check("race: other user same block/date changes 1", (await ins("2026-11-16", "u2")).meta.changes === 1);
+  const parallel = await Promise.all([ins("2026-11-20"), ins("2026-11-20")]);
+  check("race: two parallel → exactly one inserted", parallel.map((r) => r.meta.changes).sort().join(",") === "0,1");
+  check("race: inserted row is source self, attested, no note",
+    (() => { const r = mem.prepare("SELECT source, attested, note FROM safety_training_completions WHERE id = 's1'").get(); return r.source === "self" && r.attested === 1 && r.note === null; })());
+  mem.exec("INSERT INTO safety_training_completions (id,user_id,user_name,block_id,completed_on,source,recorded_by_id,recorded_by_name) VALUES ('g1','u3','U3','block-01','2026-11-16','group','m','M')");
+  check("race: an existing GROUP row doesn't block a self row", (await ins("2026-11-16", "u3")).meta.changes === 1);
+  mem.exec("UPDATE safety_training_completions SET voided_at = '2026-11-16 12:00:00' WHERE id = 's1'");
+  check("race: a VOIDED self row doesn't block a new one", (await ins("2026-11-16")).meta.changes === 1);
+  check("race: row count", count() === 8, String(count()));
+}
+
+sqliteChecks()
+  .catch((e) => { fail++; console.log(`FAIL sqlite checks threw ${String(e)}`); })
+  .finally(() => {
+    console.log(`records selfcheck: ${pass}/${pass + fail} passed`);
+    if (fail) process.exit(1);
+  });

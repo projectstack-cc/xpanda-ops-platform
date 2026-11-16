@@ -1020,6 +1020,111 @@ export const catalog: Record<string, Record<Lang, string>> = {
     es: "El proveedor, el tipo de perla y el lote # no se pueden cambiar.",
     ht: "Ou pa ka chanje founisè, tip grenn ak lo # la.",
   },
+  // saf-02: v2 Safety hub + training block pages (/v2/safety, /v2/safety/training/[block]).
+  // LEGACY = verbatim from safety/i18n.js (safetyHome.* / train.*; leading emoji dropped). NEW = best-effort es/ht,
+  // listed in CHANGELOG saf-02 for the native-speaker review. Block / video names live in lib/safety/blockText.ts.
+  // {x} placeholders are filled by the page (t() has no interpolation).
+  // LEGACY safetyHome.*
+  "safety.pageTitle": { en: "xPanda Foam Safety Portal", es: "Portal de Seguridad de xPanda Foam", ht: "Pòtal Sekirite xPanda Foam" },
+  "safety.subtitle": {
+    en: "SDS access • Safety training • Quick reference",
+    es: "Acceso a SDS • Capacitación • Referencia rápida",
+    ht: "Aksè SDS • Fòmasyon Sekirite • Referans rapid",
+  },
+  "safety.emergencyTitle": { en: "Emergency:", es: "Emergencia:", ht: "Ijans:" },
+  "safety.emergencyBody": {
+    en: "If there is immediate danger or a serious injury, call 911.",
+    es: "Si hay peligro inmediato o una lesión grave, llame al 911.",
+    ht: "Si gen danje imedyat oswa yon blesi grav, rele 911.",
+  },
+  "safety.poisonBody": {
+    en: "For chemical exposure guidance, contact Poison Control: 1-800-222-1222.",
+    es: "Para orientación por exposición química, comuníquese con el Centro de Toxicología: 1-800-222-1222.",
+    ht: "Pou gid sou ekspozisyon chimik, kontakte Poison Control: 1-800-222-1222.",
+  },
+  "safety.sdsTitle": { en: "SDS Library", es: "Biblioteca de SDS", ht: "Bibliyotèk SDS" },
+  "safety.sdsDesc": {
+    en: "Search every Safety Data Sheet by product or manufacturer.",
+    es: "Busque cualquier Hoja de Datos de Seguridad por producto o fabricante.",
+    ht: "Chèche nenpòt Fèy Done Sekirite pa pwodwi oswa manifakti.",
+  },
+  "safety.complianceTitle": { en: "Safety & Compliance:", es: "Seguridad y Cumplimiento:", ht: "Sekirite ak Konfòmite:" },
+  "safety.complianceBody": {
+    en: "This portal provides immediate access to Safety Data Sheets (SDS), training materials, and safety references to support a hazard-aware workplace and OSHA-aligned practices.",
+    es: "Este portal proporciona acceso inmediato a Hojas de Datos de Seguridad (SDS), materiales de capacitación y referencias de seguridad para apoyar un lugar de trabajo consciente de los peligros y prácticas alineadas con OSHA.",
+    ht: "Pòtal sa a bay aksè imedyat a Fèy Done Sekirite (SDS), materyèl fòmasyon, ak referans sekirite pou sipòte yon anviwònman travay ki okouran de danje epi ki aliyen ak pratik OSHA.",
+  },
+  // LEGACY train.*
+  "safety.trainingTitle": { en: "Safety Training", es: "Capacitación de Seguridad", ht: "Fòmasyon Sekirite" },
+  "safety.captionsTitle": { en: "Captions:", es: "Subtítulos:", ht: "Soustit:" },
+  "safety.completionTitle": { en: "Training Completion", es: "Confirmación de Capacitación", ht: "Konfimasyon Fòmasyon" },
+  "safety.attest": {
+    en: "I attest that I completed this training block in full.",
+    es: "Confirmo que completé este bloque de capacitación por completo.",
+    ht: "Mwen konfime mwen fini blòk fòmasyon sa a nèt.",
+  },
+  "safety.submit": { en: "Submit Completion", es: "Enviar Confirmación", ht: "Voye Konfimasyon" },
+  "safety.submitFailed": { en: "Submission failed. Try again.", es: "Falló el envío. Intente de nuevo.", ht: "Li pa pase. Tanpri eseye ankò." },
+  "safety.networkError": { en: "Network error. Please try again.", es: "Error de red. Intente de nuevo.", ht: "Pwoblèm rezo. Tanpri eseye ankò." },
+  // NEW (best-effort es/ht)
+  "safety.call911": { en: "Call 911", es: "Llamar al 911", ht: "Rele 911" },
+  "safety.poisonButton": { en: "Poison Control · 1-800-222-1222", es: "Toxicología · 1-800-222-1222", ht: "Poison Control · 1-800-222-1222" },
+  "safety.progress": { en: "{done} of {total} blocks done", es: "{done} de {total} bloques hechos", ht: "{done} sou {total} blòk fini" },
+  "safety.blockLabel": { en: "BLOCK {n}", es: "BLOQUE {n}", ht: "BLÒK {n}" },
+  "safety.videosMin": { en: "{k} videos · {m} min", es: "{k} videos · {m} min", ht: "{k} videyo · {m} min" },
+  "safety.statusDone": { en: "Done · {date}", es: "Hecho · {date}", ht: "Fini · {date}" },
+  "safety.statusNotDone": { en: "Not done", es: "Pendiente", ht: "Poko fini" },
+  "safety.moreBlocks": {
+    en: "Videos have Español and Kreyòl Ayisyen captions. More blocks are being translated and will appear here when ready.",
+    es: "Los videos tienen subtítulos en Español y Kreyòl Ayisyen. Se están traduciendo más bloques y aparecerán aquí cuando estén listos.",
+    ht: "Videyo yo gen soustit an Español ak Kreyòl Ayisyen. N ap tradui plis blòk, y ap parèt isit la lè yo pare.",
+  },
+  "safety.loading": { en: "Loading…", es: "Cargando…", ht: "Ap chaje…" },
+  "safety.loadError": {
+    en: "Couldn't load your training record.",
+    es: "No se pudo cargar su registro de capacitación.",
+    ht: "Nou pa t ka chaje dosye fòmasyon ou.",
+  },
+  "safety.retry": { en: "Retry", es: "Reintentar", ht: "Eseye ankò" },
+  "safety.sdsOpen": { en: "Open SDS Library", es: "Abrir la Biblioteca de SDS", ht: "Louvri Bibliyotèk SDS" },
+  "safety.sdsBrowse": { en: "Browse A–Z by manufacturer", es: "Explorar A–Z por fabricante", ht: "Gade A–Z pa manifakti" },
+  "safety.sdsNote": {
+    en: "Opens xpanda-sds, the same library the posted QR codes use.",
+    es: "Abre xpanda-sds, la misma biblioteca que usan los códigos QR publicados.",
+    ht: "Li louvri xpanda-sds, menm bibliyotèk kòd QR ki afiche yo itilize.",
+  },
+  "safety.recordsTitle": { en: "Training records", es: "Registros de capacitación", ht: "Dosye fòmasyon" },
+  "safety.recordsBadge": { en: "Managers", es: "Gerentes", ht: "Manadjè" },
+  "safety.recordsDesc": {
+    en: "Who has finished which block, CSV export, and group sign-off after a group session.",
+    es: "Quién terminó cada bloque, exportación CSV y firma grupal después de una sesión en grupo.",
+    ht: "Kiyès ki fini ki blòk, ekspòtasyon CSV, ak siyati gwoup apre yon sesyon an gwoup.",
+  },
+  "safety.recordsOpen": { en: "Open training records", es: "Abrir registros de capacitación", ht: "Louvri dosye fòmasyon" },
+  "safety.back": { en: "← Safety", es: "← Seguridad", ht: "← Sekirite" },
+  "safety.videoList": { en: "Videos", es: "Videos", ht: "Videyo" },
+  "safety.play": { en: "Play", es: "Reproducir", ht: "Jwe" },
+  "safety.playing": { en: "Playing", es: "Reproduciendo", ht: "Ap jwe" },
+  "safety.captionsTapCc": {
+    en: "Español · Kreyòl Ayisyen — tap CC",
+    es: "Español · Kreyòl Ayisyen — toque CC",
+    ht: "Español · Kreyòl Ayisyen — tape CC",
+  },
+  "safety.recordingFor": { en: "Recording for", es: "Registrando para", ht: "N ap anrejistre pou" },
+  "safety.fromSignIn": { en: "from your sign-in", es: "según su inicio de sesión", ht: "dapre koneksyon ou" },
+  "safety.submitting": { en: "Submitting…", es: "Enviando…", ht: "N ap voye…" },
+  "safety.recorded": { en: "Completion recorded.", es: "Confirmación registrada.", ht: "Nou anrejistre li." },
+  "safety.alreadyToday": { en: "Already recorded today.", es: "Ya se registró hoy.", ht: "Li deja anrejistre jodi a." },
+  "safety.recordedLine": { en: "Block {n} · {date}.", es: "Bloque {n} · {date}.", ht: "Blòk {n} · {date}." },
+  "safety.historyTitle": { en: "Your history for this block", es: "Su historial de este bloque", ht: "Istwa ou pou blòk sa a" },
+  "safety.historyEmpty": { en: "Not completed yet.", es: "Aún no completado.", ht: "Poko fini." },
+  "safety.sourceSelf": { en: "self", es: "usted", ht: "ou menm" },
+  "safety.sourceGroup": { en: "group", es: "grupo", ht: "gwoup" },
+  "safety.retakeNote": {
+    en: "Taking a block again adds a new completion; earlier ones are kept.",
+    es: "Si vuelve a hacer un bloque, se agrega una nueva confirmación; las anteriores se conservan.",
+    ht: "Si ou refè yon blòk, sa ajoute yon nouvo konfimasyon; ansyen yo rete.",
+  },
 };
 
 export function getStoredLang(): Lang {
