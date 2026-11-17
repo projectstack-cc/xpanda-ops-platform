@@ -1,6 +1,6 @@
 // src/app/safety/page.tsx  →  /v2/safety  (saf-02)
 // Server shell for the v2 Safety hub: platform header + client hub. Gated on `safety` (middleware, saf-01).
-// Direct URL only until saf-04 — the nav, home card and legacy /safety/ links are unchanged.
+// saf-04: the nav, home card and legacy /safety/ stubs all point here.
 import { headers } from "next/headers";
 import PlatformHeader from "@/components/PlatformHeader";
 import SafetyHub from "@/components/safety/SafetyHub";

@@ -14,10 +14,10 @@ over, and archived. Then the legacy `_worker.js` and the Cloudflare Pages projec
 
 | Status | Modules |
 |---|---|
-| **Done** | Admin · QC · Reports · Dock Loading · BOL Email · Production · Block Calculator (blk-01..03) |
+| **Done** | Admin · QC · Reports · Dock Loading · BOL Email · Production · Block Calculator (blk-01..03) · Safety training (saf-01..04; the SDS browser stays standalone at xpanda-sds) |
 | **In progress** | — |
 | **On hold — floor / stakeholder sign-off** | Load Builder (lbr-11 cutover) · Job Board Classic · Logistics Classic |
-| **Not started** | Safety training (the SDS browser stays standalone at xpanda-sds) · Shell, auth & worker (last) |
+| **Not started** | Shell, auth & worker (last) |
 
 The strangler pattern holds throughout: build unlinked, test, cut over (repoint links, archive
 the legacy page behind a redirect stub), then delete the stubs once logs show no hits.

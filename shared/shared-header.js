@@ -150,7 +150,7 @@ if (!window.__xpandaPwaInstallLoaded) {
         { label: t('common.production', null, 'Production'),      href: '/v2/production',  perm: 'production.log' },
         { label: 'QC',            href: '/v2/qc',          perm: 'qc' },
         { label: t('common.reports', null, 'Reports'),      href: '/v2/reports',     perm: 'reports' },
-        { label: t('common.safety', null, 'Safety'),        href: '/safety/',        perm: 'safety' },
+        { label: t('common.safety', null, 'Safety'),        href: '/v2/safety',      perm: 'safety' },
         { label: t('common.admin', null, 'Admin'),          href: '/v2/admin',         perm: 'admin' },
       ];
       var _links = _mods.map(function (m) {

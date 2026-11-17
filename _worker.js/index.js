@@ -6,7 +6,6 @@ import { handleApiBolCustomersSeed, handleApiBolCustomers, handleApiBolCarriers,
          handleApiSavedLoads } from './routes/bols.js';
 import { handleApiJobs, handleApiShipments, handleApiAddressValidate, handleApiAssignableUsers, handleHoleyChunksPreview, handleHoleyChunksBackfill } from './routes/jobs.js';
 import { handleApiParts } from './routes/production.js';
-import { handleApiCompletions } from './routes/qc.js';
 import { handleAuthLogin, handleAuthLogout, handleAuthMe, handleAuthChangePassword,
          handleSimulateRoleStart, handleSimulateRoleStop } from './routes/auth.js';
 import { handleApiNotifications, handleApiPushSubscribe, handleApiPushUnsubscribe } from './routes/notifications.js';
@@ -32,7 +31,6 @@ const API_ROUTES = [
   // Admin
 
   // QC
-  { path: '/api/completions', handler: (req, env) => handleApiCompletions(req, env) },
 
   // Parts / production
   { path: '/api/parts',             handler: (req, env) => handleApiParts(req, env) },
@@ -102,7 +100,7 @@ export default {
 
       // 🔥 Training redirect safety net
       if (url.pathname === "/training" || url.pathname === "/training/") {
-        return Response.redirect(`${url.origin}/safety/training/`, 301);
+        return Response.redirect(`${url.origin}/v2/safety#training`, 301);
       }
 
       // sds-02: the SDS library lives in the standalone xpanda-sds project. Old platform PDF links

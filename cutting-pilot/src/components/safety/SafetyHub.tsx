@@ -86,7 +86,7 @@ export default function SafetyHub({ canManage }: { canManage: boolean }) {
       </a>
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(300px,380px)] gap-5 items-start">
-        <section aria-labelledby="safety-training-h" className="min-w-0 flex flex-col gap-3">
+        <section id="training" aria-labelledby="safety-training-h" className="min-w-0 flex flex-col gap-3 scroll-mt-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 id="safety-training-h" className="m-0 text-[15px] font-bold">{t("safety.trainingTitle")}</h2>
             {load.state === "ok" && (
