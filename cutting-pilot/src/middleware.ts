@@ -26,6 +26,11 @@ const PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
   { prefix: "/v2/admin", keys: ["admin", "manufacturing.calculators"] },
   { prefix: "/v2/api/admin", keys: ["admin"] },
   // Both schedule views read the same data API — EITHER key grants read access.
+  // tasks-01: Daily Tasks. The TV read rides on the Schedule TV's keys (the wall display account has `schedule`);
+  // everything else is tasks.manage (GET → view, mutations → edit). Admins always pass.
+  { prefix: "/v2/api/tasks/board", keys: ["schedule", "schedule.desk", "tasks.manage"] },
+  { prefix: "/v2/api/tasks", keys: ["tasks.manage"] },
+  { prefix: "/v2/tasks", keys: ["tasks.manage"] },
   { prefix: "/v2/api/schedule-board", keys: ["schedule", "schedule.desk"] },
   // Desk page must come BEFORE the general /v2/schedule prefix (first match wins).
   { prefix: "/v2/schedule/desk", keys: ["schedule.desk"] },
@@ -280,6 +285,9 @@ export async function middleware(request: NextRequest) {
   headers.set("X-User-Can-Manage-Safety", hasPermission(user, "safety.manage", "view") ? "1" : "0");
   // saf-03: edit level — group sign-off + void UI (the routes are POSTs under /manage, so middleware already demands edit).
   headers.set("X-User-Can-Edit-Safety-Manage", hasPermission(user, "safety.manage", "edit") ? "1" : "0");
+  // tasks-01: Daily Tasks manager — view (page + reads) and edit (create/change/delete).
+  headers.set("X-User-Can-Manage-Tasks", hasPermission(user, "tasks.manage", "view") ? "1" : "0");
+  headers.set("X-User-Can-Edit-Tasks", hasPermission(user, "tasks.manage", "edit") ? "1" : "0");
   // P439 — JSON blob of the user's merged role permissions, so legacy endpoints (e.g.
   // /api/jobs/:id/assignments, /api/jobs/:id/shifts) and the new v2 /v2/api/orders/:id/shifts
   // route can gate manager-only writes on the same blob the legacy worker already trusts.

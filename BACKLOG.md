@@ -438,6 +438,18 @@
 
 ---
 
+## Daily Tasks (v2)
+
+- [ ] tasks-02 — `/v2/tasks` manager page, Add-task modal (New / From repeatable list, time-slot presets), Repeatable list, Crews. Direct URL only.
+- [ ] tasks-03 — Schedule TV: next week Mon/Tue only + Today's Assignments panel (column flow, teams/individual, time slots). Desk board keeps the full week.
+- [ ] tasks-04 — cutover (nav/home links) — HELD for Steve's floor test.
+- [ ] Data: set `users.shift` for the 11 people without one; move Israel Rudas off `3rd` (3rd shift ends 2026); two active "Stephen Cook" accounts (`admin` seed + `scook`).
+- [ ] Assign `tasks.manage` to the right role(s) in /v2/admin.
+- [ ] Later: soft warning when one person's time slots overlap; done/check-off (deliberately out of v1).
+- [ ] **Pre-existing (found in tasks-01, all v2 routes):** a literal `%` in a v2 query string (`?q=%25`) 500s in OpenNext's router (`URIError: URI malformed` in `convertToQueryString`) before the route runs. Affects every v2 search box (e.g. `/v2/api/board/search`, `/v2/api/tasks/manage/jobs`). Low impact; investigate an OpenNext upgrade/patch.
+
+---
+
 ## Schedule Board (v2)
 
 *(All shipped items moved to `CHANGELOG.md` — 2026-09-04 backlog cleanup.)*
