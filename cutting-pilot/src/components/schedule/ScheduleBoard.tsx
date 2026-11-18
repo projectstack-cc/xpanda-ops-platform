@@ -10,6 +10,7 @@ import PlatformHeader from "@/components/PlatformHeader";
 import type { ScheduleBoardResponse } from "@/types/schedule";
 import WeekBand from "./WeekBand";
 import FreshnessClock from "./FreshnessClock";
+import TodaysAssignments from "./TodaysAssignments";
 import { LiveLoadLegend } from "@/components/LiveLoadMarker";
 
 const POLL_MS = 60_000;
@@ -319,6 +320,8 @@ export default function ScheduleBoard({ userName, isAdmin, permissions }: Schedu
               weekTab={nextTab}
               days={nextDays}
               birthdays={data.birthdays ?? []}
+              dayCount={2}
+              aside={<TodaysAssignments />}
             />
           </div>
         </div>

@@ -441,7 +441,8 @@
 ## Daily Tasks (v2)
 
 - [ ] tasks-02 follow-up — re-run the Playwright walkthrough on a fresh scratch seed: after the layout-only fixes it reported 41/42 and the failing check wasn't captured (first full build was 42/42). Also: Steve eyeball of /v2/tasks against the canvas.
-- [ ] tasks-03 — Schedule TV: next week Mon/Tue only + Today's Assignments panel (column flow, teams/individual, time slots). Desk board keeps the full week.
+- [ ] tasks-03 follow-up — Next week's Wed–Fri birthdays no longer show on the TV (dropped with those columns) — decide whether to show them in the assignments header.
+- [ ] tasks-03 follow-up — Steve eyeball of the Schedule TV panel against the canvas "Schedule TV — Daily Tasks (draft)" on the real wall.
 - [ ] tasks-04 — cutover (nav/home links) — HELD for Steve's floor test.
 - [ ] Data: set `users.shift` for the 11 people without one; move Israel Rudas off `3rd` (3rd shift ends 2026); two active "Stephen Cook" accounts (`admin` seed + `scook`).
 - [ ] Assign `tasks.manage` to the right role(s) in /v2/admin.

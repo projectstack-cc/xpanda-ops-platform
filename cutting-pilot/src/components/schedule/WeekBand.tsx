@@ -55,12 +55,64 @@ interface WeekBandProps {
   birthdays: Birthday[];
   interactive?: boolean;
   onSelectOrder?: (jobId: string) => void;
+  // tasks-03 (TV only): how many weekday columns to render, from Monday. Default 5.
+  dayCount?: 2 | 5;
+  // tasks-03 (TV only): a panel rendered beside the shown days, spanning the rest of the 5-col
+  // grid (NEXT WEEK → Today's Assignments). Never combined with `interactive` — the desk board
+  // passes neither prop, so its render is unchanged.
+  aside?: React.ReactNode;
 }
 
-export default function WeekBand({ weekLabel, weekTab, days, birthdays, interactive, onSelectOrder }: WeekBandProps) {
+const shortDay = (d: string) => d.charAt(0) + d.slice(1, 3).toLowerCase();
+
+export default function WeekBand({ weekLabel, weekTab, days, birthdays, interactive, onSelectOrder, dayCount = 5, aside }: WeekBandProps) {
   const byDay = new Map(days.map((d) => [d.day_of_week, d]));
   const weekMonday = parseWeekMonday(weekTab);
-  const { bdft, chunks } = weekTotals(days);
+  const shownDays = DAY_ORDER.slice(0, dayCount);
+  // Totals cover only the shown days (same job-id chunk dedupe). All five shown → the full list,
+  // exactly as before.
+  const { bdft, chunks } = weekTotals(
+    dayCount === DAY_ORDER.length ? days : days.filter((d) => (shownDays as readonly string[]).includes(d.day_of_week))
+  );
+
+  const dayColumns = shownDays.map((day, dayIndex) => {
+    const group = byDay.get(day);
+    return (
+      <DayColumn
+        key={day}
+        dayOfWeek={day}
+        shipDate={group?.ship_date ?? columnDate(weekMonday, dayIndex)}
+        rows={group?.rows ?? []}
+        birthdays={birthdaysForColumn(birthdays, weekMonday, dayIndex)}
+        interactive={interactive}
+        onSelectOrder={onSelectOrder}
+      />
+    );
+  });
+
+  if (aside) {
+    // TV layout: [label strip + shown days] col-span-2 | aside col-span-3. Birthdays for the dropped
+    // days (incl. Friday's weekend absorption) are not rendered here (BACKLOG).
+    const range = `${shortDay(shownDays[0])}–${shortDay(shownDays[shownDays.length - 1])}`;
+    return (
+      <section className="flex-1 min-h-0 grid grid-cols-5 grid-rows-1 gap-px bg-[var(--line)]">
+        <div className="col-span-2 min-h-0 min-w-0 flex flex-col">
+          <h2 className="shrink-0 flex items-center justify-between gap-2 px-2 py-0.5 border-b border-[var(--line)] bg-[var(--surface-2)] text-[clamp(0.625rem,0.85vh,0.75rem)] font-semibold uppercase tracking-wide text-muted">
+            <span>{weekLabel}</span>
+            <span className="flex items-center gap-2 font-mono tabular-nums normal-case">
+              <span>{range}</span>
+              <span aria-hidden="true">·</span>
+              <span title={`Total board feet, ${range}`}>{Math.round(bdft).toLocaleString()} bdft</span>
+              <span aria-hidden="true">·</span>
+              <span title={`Total holey-board chunks required, ${range}`}>{chunks.toLocaleString()} chunks</span>
+            </span>
+          </h2>
+          <div className="flex-1 min-h-0 grid grid-cols-2 grid-rows-1 gap-px bg-[var(--line)]">{dayColumns}</div>
+        </div>
+        <div className="col-span-3 min-h-0 min-w-0 flex flex-col">{aside}</div>
+      </section>
+    );
+  }
 
   return (
     <section className={interactive ? "flex flex-col sm:flex-1 sm:min-h-0" : "flex-1 min-h-0 flex flex-col"}>
@@ -84,20 +136,7 @@ export default function WeekBand({ weekLabel, weekTab, days, birthdays, interact
             : "flex-1 min-h-0 grid grid-cols-1 sm:grid-cols-5 gap-px bg-[var(--line)]"
         }
       >
-        {DAY_ORDER.map((day, dayIndex) => {
-          const group = byDay.get(day);
-          return (
-            <DayColumn
-              key={day}
-              dayOfWeek={day}
-              shipDate={group?.ship_date ?? columnDate(weekMonday, dayIndex)}
-              rows={group?.rows ?? []}
-              birthdays={birthdaysForColumn(birthdays, weekMonday, dayIndex)}
-              interactive={interactive}
-              onSelectOrder={onSelectOrder}
-            />
-          );
-        })}
+        {dayColumns}
       </div>
     </section>
   );
