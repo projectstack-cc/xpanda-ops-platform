@@ -18,6 +18,7 @@ const NAV_MODULES = [
   // and place it after Manufacturing. DO NOT add it now — cutting is reached via Manufacturing (legacy nesting).
   { label: "Block nesting", href: "/v2/blocks",       perm: "manufacturing.blocks" },
   { label: "Schedule",      href: "/v2/schedule",     perm: "schedule" },
+  { label: "Tasks",         href: "/v2/tasks",        perm: "tasks.manage" },
   { label: "Production",    href: "/v2/production",   perm: "production.log" },
   { label: "QC",            href: "/v2/qc",           perm: "qc" },
   { label: "Reports",       href: "/v2/reports",      perm: "reports" },

@@ -206,6 +206,7 @@
       shiftNotesNeedReviewOne: '{count} new note need review',
       shiftNotesNeedReviewMany: '{count} new notes need review',
       deskView: 'Desk View',
+      dailyTasks: 'Daily Tasks',
       scheduleDesc: 'Delivery schedule, live production & loading status',
       productionDesc: 'Molding & expansion production log',
       adminDesc: 'Parts library, users, roles, activity log'
@@ -233,6 +234,7 @@
       shiftNotesNeedReviewOne: '{count} nota nueva necesita revisión',
       shiftNotesNeedReviewMany: '{count} notas nuevas necesitan revisión',
       deskView: 'Vista de Escritorio',
+      dailyTasks: 'Tareas Diarias',
       scheduleDesc: 'Horario de entregas, producción en vivo y estado de carga',
       productionDesc: 'Registro de producción de moldeado y expansión',
       adminDesc: 'Biblioteca de piezas, usuarios, roles, registro de actividad'
@@ -260,6 +262,7 @@
       shiftNotesNeedReviewOne: '{count} nòt nouvo bezwen revizyon',
       shiftNotesNeedReviewMany: '{count} nòt nouvo bezwen revizyon',
       deskView: 'Vi Biwo',
+      dailyTasks: 'Travay Chak Jou',
       scheduleDesc: 'Orè livrezon, pwodiksyon an dirèk ak estati chajman',
       productionDesc: 'Jounal pwodiksyon moulaj ak ekspansyon',
       adminDesc: 'Bibliyotèk pyès, itilizatè, wòl, jounal aktivite'
