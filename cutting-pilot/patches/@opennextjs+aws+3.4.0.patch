@@ -1,3 +1,28 @@
+diff --git a/node_modules/@opennextjs/aws/dist/core/routing/util.js b/node_modules/@opennextjs/aws/dist/core/routing/util.js
+index 31c5fb7..abe4eb9 100644
+--- a/node_modules/@opennextjs/aws/dist/core/routing/util.js
++++ b/node_modules/@opennextjs/aws/dist/core/routing/util.js
+@@ -86,16 +86,15 @@ export function convertRes(res) {
+  * @__PURE__
+  */
+ export function convertToQueryString(query) {
+-    // URLSearchParams is a representation of the PARSED query.
+-    // So we must decode the value before appending it to the URLSearchParams.
+-    // https://stackoverflow.com/a/45516812
++    // xpanda tasks-05: values are ALREADY decoded (parsed via URLSearchParams upstream). Decoding again crashed on a
++    // bare "%" (URIError → 500 on every v2 route) and mangled literal "%xx". Matches upstream @opennextjs/aws 4.x.
+     const urlQuery = new URLSearchParams();
+     Object.entries(query).forEach(([key, value]) => {
+         if (Array.isArray(value)) {
+-            value.forEach((entry) => urlQuery.append(key, decodeURIComponent(entry)));
++            value.forEach((entry) => urlQuery.append(key, entry));
+         }
+         else {
+-            urlQuery.append(key, decodeURIComponent(value));
++            urlQuery.append(key, value);
+         }
+     });
+     const queryString = urlQuery.toString();
 diff --git a/node_modules/@opennextjs/aws/dist/plugins/edge.js b/node_modules/@opennextjs/aws/dist/plugins/edge.js
 index 11ff059..09b3459 100644
 --- a/node_modules/@opennextjs/aws/dist/plugins/edge.js

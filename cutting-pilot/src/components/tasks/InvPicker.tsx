@@ -1,8 +1,8 @@
 "use client";
 // src/components/tasks/InvPicker.tsx  (tasks-02)
 // Link 0–5 orders (INV #s). Chips "INV 4601 · CUSTOMER · ships Wed 11/18" (+ archived tag) with remove ×.
-// Search hits GET /v2/api/tasks/manage/jobs?q= with a 250 ms debounce. `%` is stripped before sending (a literal %
-// in any v2 query string 500s in OpenNext's router — BACKLOG from tasks-01); nothing left → no request.
+// Search hits GET /v2/api/tasks/manage/jobs?q= with a 250 ms debounce; blank (after trim) → no request. `%` is sent
+// as typed (tasks-05 patched OpenNext's query double-decode; the route escapes LIKE wildcards).
 // Results are a listbox: ↑/↓ move, Enter picks, Escape closes the list only (never the modal).
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
@@ -16,7 +16,7 @@ export function jobLabel(j: JobRef): string {
   return parts.join(" · ");
 }
 
-export const cleanQuery = (q: string) => q.replace(/%/g, "").trim();
+export const cleanQuery = (q: string) => q.trim();
 
 export default function InvPicker({ value, onChange }: { value: JobRef[]; onChange: (jobs: JobRef[]) => void }) {
   const [q, setQ] = useState("");
