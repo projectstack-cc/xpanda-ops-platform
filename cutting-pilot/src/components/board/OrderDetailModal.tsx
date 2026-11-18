@@ -381,6 +381,7 @@ export default function OrderDetailModal({ jobId, onClose, onViewBol, quickEdit,
       <CoreCoverLabelsModal
         isOpen={coreLabelsOpen}
         onClose={() => setCoreLabelsOpen(false)}
+        shipDate={job.ship_date}
         lineItems={data?.line_items ?? []}
         fileKey={job.invoice_number || job.id}
       />

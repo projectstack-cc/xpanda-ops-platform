@@ -24,6 +24,9 @@ export interface BagLabelOptions {
   /** jb-13: pieces per bag by source line index (same indexing as onlyLines). Missing/undefined
    *  entry → DEFAULT_PIECES_PER_BAG. Block Calculator omits it (always 4). */
   piecesPerBag?: ReadonlyArray<number | undefined>;
+  /** jb-17: pre-formatted MM/DD/YYYY for the DATE row (job board passes the order's ship date).
+   *  Omitted = today (Block Calculator behaviour). */
+  date?: string;
 }
 
 export interface BagLabel {
@@ -89,6 +92,13 @@ export function dateString(): string {
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   return `${mm}/${dd}/${d.getFullYear()}`;
+}
+
+/** jb-17: ISO date (YYYY-MM-DD…) → MM/DD/YYYY, or null when missing/unparseable. */
+export function isoToLabelDate(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso).trim());
+  return m ? `${m[2]}/${m[3]}/${m[1]}` : null;
 }
 
 export function fitSize(
@@ -199,7 +209,7 @@ export async function buildBagLabelsPdf(lines: SkuLine[], opts?: BagLabelOptions
     console.error("Bag labels: logo embed failed", e);
   }
 
-  const date = dateString();
+  const date = opts?.date ?? dateString();
 
   let pages = 0;
   for (const bag of bags) {

@@ -4,6 +4,7 @@
 // Thin wrapper over LabelChecklistModal; the PDF is bagLabels.ts (the Block Calculator's P413/P417
 // generator) fed by the coreCoverLabels.ts job-line adapter. Bag numbering stays whole-order under
 // any selection. jb-13: pcs/bag lives in this dialog only — not saved, every open starts at 4.
+// jb-17: the DATE row is the order's ship_date (MM/DD/YYYY); printing is blocked when it's missing.
 import { useEffect, useMemo, useState } from "react";
 import LabelChecklistModal from "@/components/board/LabelChecklistModal";
 import {
@@ -11,6 +12,7 @@ import {
   DEFAULT_PIECES_PER_BAG,
   densityString,
   InvalidPiecesPerBagError,
+  isoToLabelDate,
   isValidPiecesPerBag,
   sizeString,
   UnparsedRowsError,
@@ -21,11 +23,17 @@ interface CoreCoverLabelsModalProps {
   isOpen: boolean;
   onClose: () => void;
   lineItems: CoreCoverLineItem[];
+  /** jb-17: the order's ship_date (ISO). Printed in the DATE row; printing is blocked when missing. */
+  shipDate: string | null;
   /** Used for the download filename: core-covers-labels-<fileKey>.pdf (invoice number or job id). */
   fileKey: string;
 }
 
 const PER_BAG_ERROR = "Pieces per bag must be a whole number from 1 to 999.";
+const NO_SHIP_DATE_ERROR = "Set a ship date on this order before printing Core Covers labels.";
+
+/** jb-17: defense in depth — buildPdf rejects with this when there is no ship date. */
+class NoShipDateError extends Error {}
 
 /** jb-13: raw input text → pieces per bag, or NaN when it isn't a plain whole number. */
 function parsePerBag(raw: string): number {
@@ -38,8 +46,9 @@ const perBagInput =
 const ghostBtn =
   "min-h-[44px] px-4 rounded-md border border-[var(--input-border)] text-text text-sm font-semibold cursor-pointer hover:bg-[var(--ghost-bg)] disabled:opacity-50 disabled:cursor-not-allowed";
 
-export default function CoreCoverLabelsModal({ isOpen, onClose, lineItems, fileKey }: CoreCoverLabelsModalProps) {
+export default function CoreCoverLabelsModal({ isOpen, onClose, lineItems, shipDate, fileKey }: CoreCoverLabelsModalProps) {
   const skuLines = useMemo(() => coreCoverSkuLines(lineItems), [lineItems]);
+  const labelDate = useMemo(() => isoToLabelDate(shipDate), [shipDate]);
   const [perBag, setPerBag] = useState<string[]>([]);
   const [setAllText, setSetAllText] = useState("");
 
@@ -117,6 +126,7 @@ export default function CoreCoverLabelsModal({ isOpen, onClose, lineItems, fileK
         </div>
       }
       printStatus={(selected) => {
+        if (!labelDate) return { blocked: NO_SHIP_DATE_ERROR };
         let blocked = false;
         let labels = 0;
         selected.forEach((sel, i) => {
@@ -133,6 +143,7 @@ export default function CoreCoverLabelsModal({ isOpen, onClose, lineItems, fileK
         };
       }}
       buildPdf={(selected) => {
+        if (!labelDate) return Promise.reject(new NoShipDateError(NO_SHIP_DATE_ERROR));
         const onlyLines = new Set<number>();
         selected.forEach((s, i) => { if (s) onlyLines.add(i); });
         // jb-13: an unselected line's invalid entry is not blocked by the UI, so it falls back to the
@@ -141,14 +152,16 @@ export default function CoreCoverLabelsModal({ isOpen, onClose, lineItems, fileK
           const v = perBagValue(i);
           return selected[i] || isValidPiecesPerBag(v) ? v : undefined;
         });
-        return buildBagLabelsPdf(skuLines, { onlyLines, piecesPerBag });
+        return buildBagLabelsPdf(skuLines, { onlyLines, piecesPerBag, date: labelDate });
       }}
       errorMessage={(e) =>
         e instanceof UnparsedRowsError
           ? "Can't print — these lines couldn't be read: " + e.rows.map((r) => r.item || r.raw).join(", ")
           : e instanceof InvalidPiecesPerBagError
             ? PER_BAG_ERROR
-            : "Couldn't generate the labels. Please try again."
+            : e instanceof NoShipDateError
+              ? NO_SHIP_DATE_ERROR
+              : "Couldn't generate the labels. Please try again."
       }
       filename={`core-covers-labels-${fileKey}.pdf`}
       viewerTitle="Core Covers labels"
