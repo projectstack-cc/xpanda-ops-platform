@@ -4,10 +4,10 @@
 // Fully decoupled from jobs — no job_id anywhere in this surface.
 import { useCallback, useEffect, useState } from "react";
 import { Scissors, CircleDot } from "lucide-react";
-import Modal from "@/components/Modal";
 import CrossCutterQueue from "./CrossCutterQueue";
 import HoleCutterSlots from "./HoleCutterSlots";
 import ChunkStopModal from "./ChunkStopModal";
+import ChunkCompleteModal from "./ChunkCompleteModal";
 
 export type Board = "cc" | "hc";
 
@@ -55,6 +55,8 @@ export default function ChunkBoard() {
     board: Board;
     ref_id: string;
     label: string;
+    qtyDone?: number;
+    targetChunks?: number;
   } | null>(null);
 
   function showToast(msg: string, ok = true) {
@@ -155,11 +157,11 @@ export default function ChunkBoard() {
     }
   }
 
-  function openComplete(board: Board, refId: string, label: string) {
-    setCompleteTarget({ board, ref_id: refId, label });
+  function openComplete(board: Board, refId: string, label: string, qtyDone?: number, targetChunks?: number) {
+    setCompleteTarget({ board, ref_id: refId, label, qtyDone, targetChunks });
   }
 
-  async function submitComplete() {
+  async function submitComplete(values: { qty_done_delta?: number }) {
     if (!completeTarget) return;
     const { board, ref_id } = completeTarget;
     setActing(true);
@@ -167,11 +169,11 @@ export default function ChunkBoard() {
       const res = await fetch("/v2/api/cutting/chunk-session/complete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ board, ref_id }),
+        body: JSON.stringify({ board, ref_id, ...values }),
       });
       const data = await res.json();
       if (data.ok) {
-        showToast(board === "cc" ? "Assignment complete." : "Run complete.");
+        showToast(board === "cc" ? `Assignment complete — ${data.qty_done} chunks.` : "Run complete.");
         setCompleteTarget(null);
         await fetchAll(true);
       } else {
@@ -356,7 +358,10 @@ export default function ChunkBoard() {
               acting={acting}
               onStart={(id) => start("cc", id)}
               onStop={(id, label) => openStop("cc", id, label)}
-              onComplete={(id, label) => openComplete("cc", id, label)}
+              onComplete={(id, label) => {
+                const a = assignments.find((x) => x.id === id);
+                openComplete("cc", id, label, a?.qty_done, a?.target_chunks);
+              }}
               onCreate={createAssignment}
               onEdit={updateAssignment}
               onDelete={deleteAssignment}
@@ -387,43 +392,17 @@ export default function ChunkBoard() {
         acting={acting}
       />
 
-      {/* Complete confirm — shared by both boards, composes the Modal primitive */}
-      <Modal
+      {/* Complete — shared by both boards; cc asks chunks cut this run */}
+      <ChunkCompleteModal
         isOpen={!!completeTarget}
         onClose={() => setCompleteTarget(null)}
-        title={completeTarget?.board === "hc" ? "Complete run" : "Complete assignment"}
-      >
-        <p className="text-sm text-text">
-          {completeTarget?.board === "hc" ? (
-            <>
-              Complete just ends your run on <span className="font-semibold">{completeTarget?.label}</span> —
-              counts stay.
-            </>
-          ) : (
-            <>
-              Mark <span className="font-semibold">{completeTarget?.label}</span> complete? It will
-              drop off the queue.
-            </>
-          )}
-        </p>
-        <div className="flex gap-2 justify-end pt-1">
-          <button
-            type="button"
-            onClick={() => setCompleteTarget(null)}
-            className="min-h-[44px] px-4 py-2 bg-[var(--ghost-bg)] text-text border border-border rounded text-sm font-semibold cursor-pointer hover:bg-[var(--border-light)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            disabled={acting}
-            onClick={submitComplete}
-            className="min-h-[44px] px-4 py-2 bg-[var(--success-bg)] text-[var(--success-text)] rounded text-sm font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
-          >
-            {acting ? "Saving…" : "Complete"}
-          </button>
-        </div>
-      </Modal>
+        variant={completeTarget?.board ?? "cc"}
+        label={completeTarget?.label ?? ""}
+        qtyDone={completeTarget?.qtyDone}
+        targetChunks={completeTarget?.targetChunks}
+        onSubmit={submitComplete}
+        acting={acting}
+      />
     </div>
   );
 }
