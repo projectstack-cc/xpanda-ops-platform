@@ -253,6 +253,74 @@ const SYN_DENSITY_CONFLICT = synthSlip("9103", [
   hbRow(5, "7.25"),
 ]);
 
+// ─── Synthetic page-break slips (slip-parse-09) ───────────────────────────
+// Exercise reassemblePageBreaks(): a row whose QTY re-flows onto the next PDF page as a lone one-item
+// row holding a bare number. No real slip is known to do this (INV 4404 does not), so these are built.
+// Page 1 reuses INV 4466's scrubbed header (invoice # swapped) and rows from y 372.03 down, 12 apart.
+// Page 2 uses the multi-page convention (y = pdf y − 792): the lone QTY row sits at the very top
+// (y −30), above the repeated DESCRIPTION/QTY header (y −47.64), then rows from y −66.5 down.
+// Description x 49.5, QTY right-aligned at x ≈ 562. Expectations are LEGACY's output.
+interface PbRow {
+  text: string;
+  qty?: string; // QTY on the same row (an item header)
+}
+
+function pbItems(rows: PbRow[], y0: number): SlipRawItem[] {
+  const out: SlipRawItem[] = [];
+  rows.forEach((r, i) => {
+    const y = Math.round((y0 - i * 12) * 100) / 100;
+    out.push({ text: r.text, x: 49.5, y, width: Math.round(r.text.length * 5.2 * 100) / 100 });
+    if (r.qty) out.push(pbQty(r.qty, y));
+  });
+  return out;
+}
+
+function pbQty(q: string, y: number): SlipRawItem {
+  const qw = Math.round(q.length * 6.71 * 100) / 100;
+  return { text: q, x: Math.round((QTY_RIGHT - qw) * 100) / 100, y, width: qw };
+}
+
+function pageBreakSlip(invoice: string, page1: PbRow[], loneQty: string, page2: PbRow[]): SlipRawItem[] {
+  const header = INV_4466_ITEMS
+    .filter((it) => it.y >= 390)
+    .map((it) => (it.text.includes("4466") ? { ...it, text: it.text.replace("4466", invoice) } : it));
+  return [
+    ...header,
+    ...pbItems(page1, 372.03),
+    pbQty(loneQty, -30),
+    { text: "DESCRIPTION", x: 49.5, y: -47.64, width: 75.34 },
+    { text: "QTY", x: 539.81, y: -47.64, width: 22.69 },
+    ...pbItems(page2, -66.5),
+  ];
+}
+
+const PB_LEAD: PbRow[] = [
+  { text: "Block Foam:1.0# BLOCK FOAM - RC", qty: "10" },
+  { text: "Foam Block 1.0# RC - PLAIN" },
+  { text: '4" x 48" x 144"' },
+];
+const PB_TAIL: PbRow[] = [
+  { text: "Block Foam:1.0# BLOCK FOAM - RC", qty: "6" },
+  { text: "Foam Block 1.0# RC - PLAIN" },
+  { text: '8" x 48" x 96"' },
+];
+// The page-break piece row: carries a thickness token (`2"`), no QTY on its row.
+const PB_PIECE: PbRow = { text: 'Foam Block 1.0# RC - PLAIN 2" x 48" x 96"' };
+
+// 9104: piece row ends page 1, its QTY `40` re-flows alone to the top of page 2 → merged.
+const SYN_PB_QTY = pageBreakSlip("9104", [...PB_LEAD, PB_PIECE], "40", [{ text: '2" x 48" x 96"' }, ...PB_TAIL]);
+// 9105: same shape with a comma QTY `1,200` → merged as 1200.
+const SYN_PB_COMMA = pageBreakSlip("9105", [...PB_LEAD, PB_PIECE], "1,200", [{ text: '2" x 48" x 96"' }, ...PB_TAIL]);
+// 9106: page 1 ends on a prose row with NO thickness token, then a lone `2` (a stray page number) →
+// never merged; the `2` is only a continuation line of the item above.
+const SYN_PB_PAGENUM = pageBreakSlip("9106", [...PB_LEAD, { text: "PLEASE CALL AHEAD BEFORE DELIVERY" }], "2", PB_TAIL);
+// 9107: page 1 ends on a full item header whose QTY (12) is on its own row and whose text carries a
+// thickness token, then a lone `3` → not merged (the row is already an item header).
+const SYN_PB_HASQTY = pageBreakSlip("9107", [...PB_LEAD, { ...PB_PIECE, qty: "12" }], "3", [
+  { text: "Foam Block 1.0# RC - PLAIN" },
+  ...PB_TAIL,
+]);
+
 // INV 4477 — tapered spa-cover lines (taper-dims-01). Dims print as a thickness range
 // (`2.5” - 4” x 39” x 80”`) that must parse to `2.5>4” x 39” x 80”`. Two-page slip: page-2 items keep
 // the parser's yOffset (y = pdf y − page height), so they carry negative y — exactly what
@@ -952,6 +1020,57 @@ export const SLIP_FIXTURES: SlipFixture[] = [
         { quantity: 212, thickness: 8, offload_seq: 2, zone_label: "BUILDING B" },
         { quantity: 217, thickness: 9, offload_seq: 2, zone_label: "BUILDING B" },
         { quantity: 31, thickness: 10, offload_seq: 2, zone_label: "BUILDING B" },
+      ],
+    },
+  },
+  {
+    name: "SYN 9104 — QTY re-flowed to next page, merged",
+    items: SYN_PB_QTY,
+    expect: {
+      // legacy merges 1 row: the lone `40` becomes the piece row's QTY.
+      invoice_number: "9104",
+      line_items: [
+        { quantity: 10, dimensions: '4" x 48" x 144"', description: "Foam Block 1.0# RC - PLAIN" },
+        { quantity: 40, dimensions: '2" x 48" x 96"' },
+        { quantity: 6, dimensions: '8" x 48" x 96"', description: "Foam Block 1.0# RC - PLAIN" },
+      ],
+    },
+  },
+  {
+    name: "SYN 9105 — comma QTY 1,200 re-flowed, merged",
+    items: SYN_PB_COMMA,
+    expect: {
+      // legacy merges 1 row: the lone `1,200` becomes QTY 1200.
+      invoice_number: "9105",
+      line_items: [
+        { quantity: 10, dimensions: '4" x 48" x 144"', description: "Foam Block 1.0# RC - PLAIN" },
+        { quantity: 1200, dimensions: '2" x 48" x 96"' },
+        { quantity: 6, dimensions: '8" x 48" x 96"', description: "Foam Block 1.0# RC - PLAIN" },
+      ],
+    },
+  },
+  {
+    name: "SYN 9106 — stray page number after prose, not merged",
+    items: SYN_PB_PAGENUM,
+    expect: {
+      // legacy merges 0 rows: prose has no thickness token, so no fabricated item; the `2` is a continuation line.
+      invoice_number: "9106",
+      line_items: [
+        { quantity: 10, dimensions: '4" x 48" x 144"', description: "Foam Block 1.0# RC - PLAIN" },
+        { quantity: 6, dimensions: '8" x 48" x 96"', description: "Foam Block 1.0# RC - PLAIN" },
+      ],
+    },
+  },
+  {
+    name: "SYN 9107 — lone number after a header that has its QTY, not merged",
+    items: SYN_PB_HASQTY,
+    expect: {
+      // legacy merges 0 rows: the row is already an item header (QTY 12 kept, the `3` is a continuation line).
+      invoice_number: "9107",
+      line_items: [
+        { quantity: 10, dimensions: '4" x 48" x 144"', description: "Foam Block 1.0# RC - PLAIN" },
+        { quantity: 12, dimensions: "", description: "Foam Block 1.0# RC - PLAIN" },
+        { quantity: 6, dimensions: '8" x 48" x 96"', description: "Foam Block 1.0# RC - PLAIN" },
       ],
     },
   },

@@ -310,13 +310,52 @@ function extractThickness(text: string): number | null {
   return isNaN(t) ? null : t;
 }
 
+// ─── Page-break reassembly ────────────────────────────────────────────────
+// slip-parse-09: verbatim port of legacy reassemblePageBreaks() (jobs/packing-slip-parser.js,
+// lbz-parse-01). A piece row's description and its trailing QTY can land on opposite sides of a
+// PDF page break; pdf.js then returns the QTY as a lone one-item row holding a bare 1-4 digit
+// integer. Splice it back onto the description row as its trailing QTY item so isItemHeader()
+// sees one logical line. Only merges when the description row carries a thickness token, so a
+// stray page-number row after ordinary prose is never turned into a fake line item.
+// Keep in sync with the legacy function.
+function reassemblePageBreaks(rows: LineGroup[]): LineGroup[] {
+  const out: LineGroup[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const sorted = [...row.items].sort((a, b) => a.x - b.x);
+    const text = reconstructLine(sorted).trim();
+
+    if (text && extractThickness(text) != null && !isItemHeader(sorted) && i + 1 < rows.length) {
+      const nextSorted = [...rows[i + 1].items].sort((a, b) => a.x - b.x);
+      const nextText = reconstructLine(nextSorted).trim().replace(/,/g, "");
+      const isBareQty = nextSorted.length === 1 && /^\d{1,4}$/.test(nextText);
+
+      if (isBareQty) {
+        const last = sorted[sorted.length - 1];
+        const lastRight = last.x + (last.width || last.text.length * 5.5);
+        out.push({
+          y: row.y,
+          items: [...row.items, { ...nextSorted[0], x: lastRight + 60 }],
+        });
+        i++; // consume the bare-qty row — merged into this row
+        continue;
+      }
+    }
+
+    out.push(row);
+  }
+  return out;
+}
+
 function parseLineItems(groups: LineGroup[], descriptionY: number): ParsedLineItem[] {
   const items: ParsedLineItem[] = [];
   let current: ParsedLineItem | null = null;
 
   const relevant = groups.filter((lg) => lg.y < descriptionY).sort((a, b) => b.y - a.y);
 
-  for (const lg of relevant) {
+  const reassembled = reassemblePageBreaks(relevant);
+
+  for (const lg of reassembled) {
     const sorted = [...lg.items].sort((a, b) => a.x - b.x);
     const lineText = reconstructLine(sorted).trim();
     if (!lineText) continue;
