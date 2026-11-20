@@ -295,11 +295,13 @@ window.PackingSlipParser = (function () {
   const ZONE_ORDINAL_PATTERNS = [
     /OFFLOAD\s+(FIRST|SECOND|THIRD|FOURTH|FIFTH|SIXTH)\b/i,
     /(FIRST|SECOND|THIRD|FOURTH|FIFTH|SIXTH)\s+TO\s+DELIVER/i,
+    /DELIVER\s+(FIRST|SECOND|THIRD|FOURTH|FIFTH|SIXTH)\b/i, // slip-parse-08: INV 4575 "DELIVER FIRST - LABEL BUILDING A"
   ];
 
   const ZONE_LABEL_PATTERNS = [
     /Label\s*&\s*segregate\s+as:\s*(.+)/i,
     /LABEL\s+as\s+(.+)/i,
+    /DELIVER\s+(?:FIRST|SECOND|THIRD|FOURTH|FIFTH|SIXTH)\b\W*LABEL\s+(.+)/i, // slip-parse-08: INV 4575
   ];
 
   // A zone-density group's piece count can be embedded in the packing slip as "{27 pieces}" —
@@ -343,6 +345,11 @@ window.PackingSlipParser = (function () {
       }
     }
     return null;
+  }
+
+  // slip-parse-08: true when any of the given lines carries a zone ordinal or label marker.
+  function hasZoneMarker(lines) {
+    return lines.some(t => extractZoneOrdinal(t) != null || extractZoneLabel(t) != null);
   }
 
   function extractBracePieceCount(text) {
@@ -390,8 +397,16 @@ window.PackingSlipParser = (function () {
 
     for (const item of items) {
       const headerText = item.category || '';
-      const ord = extractZoneOrdinal(headerText);
-      const lbl = extractZoneLabel(headerText);
+      // slip-parse-08: real slips put the markers on the header row's continuation lines (INV 4404:
+      // `OFFLOAD FIRST` / `Label & segregate as: …` under a BDFT-total row) or on a qty-less notes row
+      // (INV 4575), not only in the category, so scan each line of the row separately.
+      const zoneLines = item._zoneLines || [headerText];
+      let ord = null;
+      let lbl = null;
+      for (const t of zoneLines) {
+        if (ord == null) ord = extractZoneOrdinal(t);
+        if (lbl == null) lbl = extractZoneLabel(t);
+      }
 
       if (ord != null || lbl != null) {
         closeGroup();
@@ -405,7 +420,10 @@ window.PackingSlipParser = (function () {
           zoneInfo.set(key, info);
         }
         awaitingSummary = true;
-        continue; // marker rows aren't real line items
+        // slip-parse-08: a marker in the category, or on a notes row, makes a marker-only row. A marker
+        // only in a product row's continuation lines means the row itself belongs to the zone: fall
+        // through, so a no-thickness row is that group's BDFT-total row and a thickness row is a piece.
+        if (hasZoneMarker([headerText]) || /^notes\b/i.test(headerText)) continue; // marker rows aren't real line items
       }
 
       if (!pending) { tagged.push(item); continue; } // not inside any zone context
@@ -556,8 +574,28 @@ window.PackingSlipParser = (function () {
           _descLines: [],
         };
 
+      } else if (/^notes$/i.test(lineText)) {
+        // slip-parse-08: a qty-less QuickBooks notes item renders as a bare `notes` row. It is its own
+        // item, not a continuation of the previous line (INV 4575: `notes` / `DELIVER SECOND - LABEL
+        // BUILDING B` was being appended to the 12" piece's description). Its lines are kept only so
+        // tagOffloadZones() can read zone markers; without one it is filtered out like any notes item.
+        if (current) items.push(current);
+        current = {
+          category: 'notes',
+          description: '',
+          label: '',
+          dimensions: '',
+          quantity: 0,
+          _isNotes: true,
+          _bareNotes: true,
+          _descLines: [],
+        };
+
       } else if (current) {
-        if (current._isNotes) continue;
+        if (current._isNotes) {
+          if (current._bareNotes) current._descLines.push(lineText); // slip-parse-08
+          continue;
+        }
 
         // Extract dimensions if not yet found
         const dimMatch = lineText.match(/(\d[\d.\/\-]*(?:\s+\d+\/\d+)?)\s*[""”]?\s*[xX×]\s*(\d[\d.\/\-]*(?:\s+\d+\/\d+)?)\s*[""”]?\s*[xX×]\s*(\d[\d.\/\-]*(?:\s+\d+\/\d+)?)\s*[""”]?/);
@@ -602,6 +640,8 @@ window.PackingSlipParser = (function () {
 
     return items
       .filter(item => {
+        // slip-parse-08: a bare notes row carrying a zone marker survives to tagOffloadZones(), which drops it.
+        if (item._bareNotes && hasZoneMarker(item._descLines)) return true;
         if (item._isNotes) return false;
         if (/credit card|processing fee/i.test((item.category || '') + ' ' + (item._descLines || []).join(' ') + ' ' + (item.description || ''))) return false;
         if (!item.quantity || item.quantity <= 0) return false;
@@ -624,6 +664,8 @@ window.PackingSlipParser = (function () {
         // lbz-parse-01: full row text for offload-zone / density-conflict detection — consumed
         // and deleted by tagOffloadZones()/parseDoc() below, never reaches the caller.
         item._rawText = _thkSrc;
+        // slip-parse-08: the row's lines kept separate for zone-marker detection (deleted in parseDoc()).
+        item._zoneLines = [item.category || '', ...(item._descLines || [])];
         // slip-parse-01: laminate lines must carry a facer spec. Strip the base
         // "Laminate/laminate N# density" boilerplate; if nothing is left, flag it.
         if (/laminate/i.test((item.category || '') + ' ' + (item.description || ''))) {
@@ -636,6 +678,7 @@ window.PackingSlipParser = (function () {
         }
         delete item._descOpen;
         delete item._isNotes;
+        delete item._bareNotes;
         delete item._descLines;
         return item;
       });
@@ -857,7 +900,7 @@ window.PackingSlipParser = (function () {
     data.offload_warnings = zoneResult.warnings;
     data.line_items = dropHbBdftSummaries(data.line_items);
     tagDensityConflicts(data.line_items);
-    data.line_items.forEach(li => { delete li._rawText; });
+    data.line_items.forEach(li => { delete li._rawText; delete li._zoneLines; });
 
     data.line_items = (data.line_items || []).filter(li => {
       const qty = parseFloat(li.quantity);

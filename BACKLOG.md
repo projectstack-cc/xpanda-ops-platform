@@ -410,9 +410,19 @@
 - [ ] Order entry: load-existing-order-for-edit deep link — `/v2/orders` only creates new orders
   (P339 scope). The board's "Open in order entry" link (P343) goes to the module, not a specific
   order; once order entry supports loading an existing job for edit, deep-link to it directly.
-- [ ] packingSlip.ts parity gap: v2 has no `reassemblePageBreaks` (legacy lbz-parse-01) — a row whose
-  QTY re-flows onto the next PDF page parses differently in v2. Real zoned slips (4404) hit this. Port
-  verbatim + add a two-page fixture to `scripts/packing-slip-parity.mjs` (found during slip-parse-05).
+- [ ] **slip-parse-09** — packingSlip.ts parity gap: v2 has no `reassemblePageBreaks` (legacy lbz-parse-01),
+  so a row whose bare QTY re-flows onto the next PDF page as its own row parses differently in v2. No real
+  slip is known to trigger it: INV 4404 does not (its QTY stays on the header row and only the description
+  crosses the page; legacy merges 0 rows), so it isn't a fixture. Port verbatim, proven with synthetic cases
+  only (positive, `1,200` comma qty, stray page number after prose, header row that already has a QTY).
+- [ ] Packing-slip zones: a zone marker found only in a product row's continuation lines makes a no-thickness
+  row that zone group's BDFT-total row (dropped). That holds for Holey Board (INV 4404), but a zoned
+  non-HB row (e.g. Block Foam, which has no thickness token) would be dropped as a BDFT total. No real slip
+  shows this yet. Add a fixture and narrow the rule if one turns up. (slip-parse-08)
+- [ ] Packing-slip zones: only three zone wordings are known (`OFFLOAD <ord>` + `Label & segregate as:`,
+  `<ord> TO DELIVER >` + `LABEL as`, and `DELIVER <ord> - LABEL <ZONE>` from INV 4575). Batch upload should
+  surface an order whose slip mentions OFFLOAD / DELIVER / LABEL but yields no zones, so a fourth wording
+  isn't silently missed. (slip-parse-08)
 - [ ] Packing-slip parse: QuickBooks lines are hand-typed. Add a fixture for each new miss Steve finds (the harness is the regression net). (slip-parse-07)
 - [ ] Packing-slip parser rewrite (anchor-relative extraction + per-vendor template registry) —
   P340 ported the existing y-coordinate/x-gap heuristic parser as-is into v2; the more robust
