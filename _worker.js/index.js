@@ -1,4 +1,4 @@
-import { json, logActivity, generateAccessToken, normalizeName, validateSession, SessionLookupError, sessionUnavailableResponse, PATH_PERMISSION_MAP, API_PERMISSION_MAP, getPermissionKey, hasPermission, isAllowedUnmappedMutation, safeJsonParse } from './lib/core.js';
+import { json, logActivity, generateAccessToken, normalizeName, validateSession, SessionLookupError, sessionUnavailableResponse, PATH_PERMISSION_MAP, API_PERMISSION_MAP, getPermissionKey, hasPermission, hasReadOnlyAltPermission, isAllowedUnmappedMutation, safeJsonParse } from './lib/core.js';
 import { dispatchNotification } from './lib/push.js';
 import { handleApiLoadingBays, handleApiLoadingAssignments, handleApiLoadingPhotos } from './routes/loading.js';
 import { handleApiBolCustomersSeed, handleApiBolCustomers, handleApiBolCarriers, handleApiBols,
@@ -194,7 +194,7 @@ export default {
 
           if (permKey && !isEscapePath) {
             const requiredAction = (request.method === 'GET' || request.method === 'HEAD') ? 'view' : 'edit';
-            if (!hasPermission(user, permKey, requiredAction)) {
+            if (!hasPermission(user, permKey, requiredAction) && !(isApi && requiredAction === 'view' && hasReadOnlyAltPermission(user, url.pathname))) {
               if (isApi) {
                 return json({ ok: false, error: 'Access denied. Insufficient permissions.' }, 403);
               }

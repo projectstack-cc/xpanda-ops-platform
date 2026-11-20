@@ -453,6 +453,7 @@
 - [ ] **Pre-existing ladder gap (not changed by sched-dual-01):** a job with some lines complete and the rest not_started (none in_progress, no session) reads "Not Started". Decide whether that should be "In Production – x%".
 - [ ] **sched-mobile-01 follow-up — StatusBadge + detail modal on phones.** `StatusBadge` was left at TV sizing on mobile (out of scope); bump it if it reads small on a real phone. Eyeball `OrderDetailModal` at 390px.
 - [ ] **sched-mobile-01 follow-up — Steve phone eyeball of /v2/schedule/desk.**
+- [ ] **sched-desk-01 follow-up — Desk order modal: prints/packing-slip reads share the `schedule.desk` read-only alt — if more modal sections are added (e.g. View BOL), extend `READ_ONLY_ALT_KEYS` + `API_READ_ONLY_ALT_KEYS` together.**
 
 ## Loading Board (v2)
 

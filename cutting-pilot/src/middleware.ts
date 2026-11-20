@@ -124,6 +124,16 @@ const PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
 // identity comes from the session). Exact paths, POST only. Keep this list tiny.
 const VIEW_LEVEL_POSTS = new Set(["/v2/api/safety/complete"]);
 
+// sched-desk-01: extra keys that grant READ ONLY (GET/HEAD) on an otherwise-mapped path. Never consulted for
+// mutations. Used so the schedule desk's read-only OrderDetailModal works for roles without Job Board access.
+// Mirrored by API_READ_ONLY_ALT_KEYS in _worker.js/lib/core.js (legacy packing-slip read) — keep in sync.
+// Do NOT add schedule.desk to the /v2/api/board PERMISSION_MAP row instead: Cutting Team holds schedule.desk
+// EDIT, which would then let it PUT order changes.
+const READ_ONLY_ALT_KEYS: Array<{ pattern: RegExp; keys: string[] }> = [
+  { pattern: /^\/v2\/api\/board\/(?!search\/?$|trailer-stops\/?$)[^/]+\/?$/, keys: ["schedule.desk"] },
+  { pattern: /^\/v2\/api\/board\/[^/]+\/prints(\/[^/]+)?\/?$/, keys: ["schedule.desk"] },
+];
+
 // admin-02 — mirrors legacy ESCAPE_PREFIXES (_worker.js/index.js): a REAL administrator always passes the
 // gate on the admin surface, even while testing as a role whose permissions would deny it — otherwise an
 // admin testing as e.g. Loading Team could not reach /v2/admin to stop testing.
@@ -233,6 +243,9 @@ export async function middleware(request: NextRequest) {
   const permitted =
     requiredKeys === null ||
     requiredKeys.some((k) => hasPermission(user, k, action)) ||
+    (action === "view" &&
+      (request.method === "GET" || request.method === "HEAD") &&
+      READ_ONLY_ALT_KEYS.some((m) => m.pattern.test(url.pathname) && m.keys.some((k) => hasPermission(user, k, "view")))) ||
     (user.isRealAdmin && ADMIN_ESCAPE_PREFIXES.some((p) => url.pathname.startsWith(p)));
   if (!permitted) {
     if (isApi) return NextResponse.json({ ok: false, error: "Access denied." }, { status: 403 });

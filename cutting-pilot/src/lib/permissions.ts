@@ -34,7 +34,7 @@ export const PERMISSION_LABELS: Record<string, { group: string; label: string }>
   "reports":                        { group: "Reports",       label: "Reports & Analytics" },
   "orders":                         { group: "Orders",        label: "Order Entry" },
   "schedule":                       { group: "Schedule",      label: "Schedule Board (TV)" },
-  "schedule.desk":                  { group: "Schedule",      label: "Schedule Board (Desk)" },
+  "schedule.desk":                  { group: "Schedule",      label: "Schedule Board (Desk) + order details" },
   "tasks.manage":                   { group: "Schedule",      label: "Daily Tasks — Assign tasks, repeatable list, crews (manager)" },
   "admin":                          { group: "Admin",         label: "Administration" },
 };

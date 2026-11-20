@@ -214,6 +214,16 @@ export const API_PERMISSION_MAP = [
   { pattern: /^\/api\/cutting/,           key: 'manufacturing.cutting' },
 ];
 
+// sched-desk-01: extra permission keys that grant READ ONLY (GET/HEAD) on an otherwise-mapped API path.
+// Mirrors READ_ONLY_ALT_KEYS in cutting-pilot/src/middleware.ts — keep in sync.
+export const API_READ_ONLY_ALT_KEYS = [
+  { pattern: /^\/api\/jobs\/[^/]+\/packing-slip\/?$/, keys: ['schedule.desk'] },
+];
+
+export function hasReadOnlyAltPermission(user, pathname) {
+  return API_READ_ONLY_ALT_KEYS.some(e => e.pattern.test(pathname) && e.keys.some(k => hasPermission(user, k, 'view')));
+}
+
 export function getPermissionKey(pathname, isApi) {
   const map = isApi ? API_PERMISSION_MAP : PATH_PERMISSION_MAP;
   for (const entry of map) {
