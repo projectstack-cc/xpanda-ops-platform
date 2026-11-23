@@ -143,13 +143,19 @@ interface OrderEntryFormProps {
   userName: string;
   isAdmin: boolean;
   permissions: Record<string, { view?: boolean; edit?: boolean }>;
+  /** ord-dash-02: rendered inside the /v2/orders/desk slide-over — no PlatformHeader, no min-h-screen. */
+  embedded?: boolean;
+  /** ord-dash-02: invoice # prefill on first mount only (New order still resets to ""). */
+  initialInvoice?: string;
+  /** ord-dash-02: embedded success screen's "Done" button. */
+  onDone?: () => void;
 }
 
-export default function OrderEntryForm({ userName, isAdmin, permissions }: OrderEntryFormProps) {
+export default function OrderEntryForm({ userName, isAdmin, permissions, embedded, initialInvoice, onDone }: OrderEntryFormProps) {
   const { t } = useLang();
   const [customer, setCustomer] = useState("");
   const [poNumber, setPoNumber] = useState("");
-  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [invoiceNumber, setInvoiceNumber] = useState(initialInvoice ?? "");
 
   const [shipToCompany, setShipToCompany] = useState("");
   const [shipToAttention, setShipToAttention] = useState("");
@@ -784,10 +790,16 @@ function setQtyAsBdftConvert(on: boolean) {
     }
   }
 
+  // ord-dash-02: embedded (desk slide-over) drops the page chrome; standalone is unchanged.
+  const shellClass = embedded ? "flex flex-col bg-bg" : "min-h-screen flex flex-col bg-bg";
+  const header = embedded ? null : (
+    <PlatformHeader userName={userName} isAdmin={isAdmin} permissions={permissions} title="Orders · v2" currentPath="/v2/orders" />
+  );
+
   if (savedId) {
     return (
-      <div className="min-h-screen flex flex-col bg-bg">
-        <PlatformHeader userName={userName} isAdmin={isAdmin} permissions={permissions} title="Orders · v2" currentPath="/v2/orders" />
+      <div className={shellClass}>
+        {header}
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="w-full max-w-[770px] bg-surface border border-[var(--card-border)] rounded-2xl p-8 text-center space-y-4">
             <h2 className="text-lg font-semibold text-text">{t("orders.orderSaved")}</h2>
@@ -802,6 +814,15 @@ function setQtyAsBdftConvert(on: boolean) {
               <p className="text-sm text-[var(--warn-text)]">{printError}</p>
             )}
             <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+              {embedded && (
+                <button
+                  type="button"
+                  onClick={onDone}
+                  className="min-h-[44px] px-5 rounded-md bg-[var(--brand)] text-white text-sm font-semibold cursor-pointer hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+                >
+                  Done
+                </button>
+              )}
               <button
                 type="button"
                 onClick={resetForm}
@@ -843,8 +864,8 @@ function setQtyAsBdftConvert(on: boolean) {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-bg">
-      <PlatformHeader userName={userName} isAdmin={isAdmin} permissions={permissions} title="Orders · v2" currentPath="/v2/orders" />
+    <div className={shellClass}>
+      {header}
 
       <form onSubmit={handleSubmit} className="flex-1 w-full max-w-[770px] mx-auto px-4 py-6 space-y-6">
         <h1 className="text-xl font-semibold text-text">{t("orders.newOrder")}</h1>

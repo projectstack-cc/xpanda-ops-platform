@@ -7,12 +7,24 @@ interface Props {
   onClose: () => void;
   title: string;
   children: ReactNode;
+  /** ord-dash-02: panel width on sm+. "sm" (default) = sm:max-w-sm; "xl" = sm:max-w-[820px] (order form). */
+  size?: "sm" | "xl";
 }
+
+// Literal classes so Tailwind generates both.
+const SIZE_CLASS: Record<NonNullable<Props["size"]>, string> = {
+  sm: "sm:max-w-sm",
+  xl: "sm:max-w-[820px]",
+};
 
 // Reusable right-anchored slide-over. Overlays from the right on ALL breakpoints
 // (distinct from <Sheet>, which becomes a static side column on md+).
 // Only the close button dismisses (no scrim click, no Escape — modal-01).
-export default function SlideOver({ isOpen, onClose, title, children }: Props) {
+// ord-dash-02: children are UNMOUNTED while closed ({isOpen && children}), so every open starts
+// fresh (no form / slip / blob state leaks between opens). The header (title + close) stays fixed;
+// the body scrolls inside the panel. When open the panel carries no transform (transform-none), so
+// `position: fixed` modals rendered inside it (Modal.tsx has no portal) still cover the viewport.
+export default function SlideOver({ isOpen, onClose, title, children, size = "sm" }: Props) {
   return (
     <>
       {isOpen && (
@@ -25,11 +37,12 @@ export default function SlideOver({ isOpen, onClose, title, children }: Props) {
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        aria-hidden={!isOpen}
         className={[
-          "fixed inset-y-0 right-0 z-[56] w-full sm:max-w-sm bg-surface border-l border-border",
+          `fixed inset-y-0 right-0 z-[56] w-full ${SIZE_CLASS[size]} bg-surface border-l border-border`,
           "flex flex-col overflow-hidden",
-          "transition-transform duration-200 motion-reduce:transition-none",
-          isOpen ? "translate-x-0" : "translate-x-full",
+          "transition-[transform,visibility] duration-200 motion-reduce:transition-none",
+          isOpen ? "transform-none" : "translate-x-full invisible",
         ].join(" ")}
         style={{ boxShadow: "var(--shadow-md)" }}
       >
@@ -44,7 +57,7 @@ export default function SlideOver({ isOpen, onClose, title, children }: Props) {
             <X size={18} aria-hidden="true" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto">{children}</div>
+        <div className="flex-1 min-h-0 overflow-y-auto">{isOpen && children}</div>
       </div>
     </>
   );

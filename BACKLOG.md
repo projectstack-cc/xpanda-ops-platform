@@ -380,7 +380,9 @@
 > fallback. Both boards are in **active testing**; legacy retirement (jb-09) has no date. Reuses `jobs` +
 > `job_line_items`; no new schema.
 
-- [ ] **Orders desk:** ord-dash-02 UI (`/v2/orders/desk`, dark), ord-dash-03 batch slip drop (flag slips mentioning OFFLOAD / DELIVER / LABEL that yield no zones, per slip-parse-08's BACKLOG item), ord-dash-04 cutover (held). ord-dash-01 (`GET /v2/api/orders/desk`) shipped.
+- [ ] **Orders desk:** ord-dash-03 batch slip drop (flag slips mentioning OFFLOAD / DELIVER / LABEL that yield no zones, per slip-parse-08's BACKLOG item; reuse `lib/orders/deskLabels.ts`), ord-dash-04 cutover (held). ord-dash-01 (`GET /v2/api/orders/desk`) and ord-dash-02 (`/v2/orders/desk` UI, dark) shipped.
+- [ ] **Orders desk i18n (en/es/ht).** `/v2/orders/desk` is English-only (like Reports); move its strings and `deskLabels.ts` labels to the lang dictionaries.
+- [ ] **Desk Edit omits `boardJobs`**, so trailer-group link candidates are empty in the desk's Edit modal; pass a candidate list if Steve links trailers from the desk.
 - [ ] **Orders desk — density conflicts aren't persisted.** If the desk should flag them, store a per-line flag at create (schema change).
 - [ ] **jb-11 follow-up — add the Priority control to `/v2/orders` (order entry)** so priority can be set at
   creation (today it defaults to Normal). Reuse `components/board/PrioritySelect.tsx` + `lib/priority.ts`.
