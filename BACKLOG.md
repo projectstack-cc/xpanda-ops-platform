@@ -274,6 +274,8 @@
 ## Manufacturing / Cutting (React pilot)
 
 
+- [ ] **cc-blocks-01 follow-up — check block IDs against the Production Log.** Block IDs are validated by format only. Once the Production Log is on the floor, consider checking them against `production_molding_blocks` (and filling in the block's lot/density) — blocked on floor rollout.
+- [ ] **cc-blocks-01 follow-up — legacy tile wording.** The legacy `manufacturing/index.html` Cross/Hole Cutter tile still says "Chunk task assignments" (en/es/ht i18n keys) — reword if wanted.
 - [ ] **cutting-ids-01 follow-up — after deploy, re-run the orphan count; new orphans should be 0**
   (`SELECT COUNT(*) FROM cutting_line_progress clp WHERE NOT EXISTS (SELECT 1 FROM job_line_items li WHERE li.id = clp.line_item_id)` — baseline 311 on 2026-10-06).
 - [ ] **Checklist adoption:** 15 of 27 Main Line completions (9/29–10/6) had zero parts checked — the activity

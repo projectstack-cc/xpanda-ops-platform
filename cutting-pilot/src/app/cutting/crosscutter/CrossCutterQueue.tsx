@@ -12,8 +12,8 @@ interface Props {
   onStart: (id: string) => void;
   onStop: (id: string, label: string) => void;
   onComplete: (id: string, label: string) => void;
-  onCreate: (label: string, targetChunks: number) => void;
-  onEdit: (id: string, patch: { label?: string; target_chunks?: number }) => void;
+  onCreate: (label: string, targetChunks: number, sizeText: string) => void;
+  onEdit: (id: string, patch: { label?: string; target_chunks?: number; size_text?: string }) => void;
   onDelete: (id: string) => void;
   onReorder: (order: string[]) => void;
 }
@@ -34,15 +34,18 @@ export default function CrossCutterQueue({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState("");
   const [editTarget, setEditTarget] = useState("");
+  const [editSize, setEditSize] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [newLabel, setNewLabel] = useState("");
   const [newTarget, setNewTarget] = useState("");
+  const [newSize, setNewSize] = useState("");
   const [formOpen, setFormOpen] = useState(false);
 
   function startEdit(a: CcAssignment) {
     setEditingId(a.id);
     setEditLabel(a.label);
     setEditTarget(String(a.target_chunks));
+    setEditSize(a.size_text ?? "");
   }
 
   function saveEdit(id: string) {
@@ -50,6 +53,7 @@ export default function CrossCutterQueue({
     onEdit(id, {
       label: editLabel.trim() || undefined,
       target_chunks: !isNaN(target) && target >= 0 ? target : undefined,
+      size_text: editSize.trim(), // "" clears it
     });
     setEditingId(null);
   }
@@ -65,9 +69,10 @@ export default function CrossCutterQueue({
   function submitNew() {
     const target = parseInt(newTarget, 10);
     if (!newLabel.trim() || isNaN(target) || target < 0) return;
-    onCreate(newLabel.trim(), target);
+    onCreate(newLabel.trim(), target, newSize.trim());
     setNewLabel("");
     setNewTarget("");
+    setNewSize("");
     setFormOpen(false);
   }
 
@@ -100,7 +105,7 @@ export default function CrossCutterQueue({
               </div>
               <div>
                 <label htmlFor="new-cc-target" className="block text-xs font-medium text-muted mb-1">
-                  Target chunks
+                  Target blocks
                 </label>
                 <input
                   id="new-cc-target"
@@ -110,6 +115,19 @@ export default function CrossCutterQueue({
                   value={newTarget}
                   onChange={(e) => setNewTarget(e.target.value)}
                   className="min-h-[44px] w-28 rounded border border-[var(--input-border)] bg-[var(--input-bg)] text-text px-3 py-2 text-sm font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                />
+              </div>
+              <div>
+                <label htmlFor="new-cc-size" className="block text-xs font-medium text-muted mb-1">
+                  Size <span className="font-normal">(optional)</span>
+                </label>
+                <input
+                  id="new-cc-size"
+                  value={newSize}
+                  maxLength={60}
+                  onChange={(e) => setNewSize(e.target.value)}
+                  placeholder="e.g. 174/24 (82/82)"
+                  className="min-h-[44px] rounded border border-[var(--input-border)] bg-[var(--input-bg)] text-text px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)] w-44"
                 />
               </div>
               <button
@@ -126,6 +144,7 @@ export default function CrossCutterQueue({
                   setFormOpen(false);
                   setNewLabel("");
                   setNewTarget("");
+                  setNewSize("");
                 }}
                 className="min-h-[44px] px-4 py-2 bg-[var(--ghost-bg)] text-text border border-border rounded text-sm font-semibold cursor-pointer hover:bg-[var(--border-light)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
               >
@@ -138,7 +157,7 @@ export default function CrossCutterQueue({
 
       {assignments.length === 0 && (
         <p className="px-4 py-6 text-sm text-muted">
-          No chunk assignments queued
+          No block assignments queued
           {canManage ? " — add one above." : " — check with a supervisor."}
         </p>
       )}
@@ -164,7 +183,16 @@ export default function CrossCutterQueue({
                   inputMode="numeric"
                   value={editTarget}
                   onChange={(e) => setEditTarget(e.target.value)}
+                  aria-label="Target blocks"
                   className="min-h-[44px] w-24 rounded border border-[var(--input-border)] bg-[var(--input-bg)] text-text px-3 py-2 text-sm font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                />
+                <input
+                  value={editSize}
+                  maxLength={60}
+                  onChange={(e) => setEditSize(e.target.value)}
+                  placeholder="e.g. 174/24 (82/82)"
+                  aria-label="Size"
+                  className="min-h-[44px] rounded border border-[var(--input-border)] bg-[var(--input-bg)] text-text px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)] w-44"
                 />
                 <button
                   type="button"
@@ -186,8 +214,9 @@ export default function CrossCutterQueue({
                 <div className="min-w-0">
                   <span className="font-medium text-sm text-text">{a.label}</span>
                   <span className="ml-2 font-mono tabular-nums text-xs text-muted">
-                    {a.qty_done}/{a.target_chunks} chunks
+                    {a.qty_done}/{a.target_chunks} blocks
                   </span>
+                  {a.size_text && <p className="text-xs text-muted mt-0.5">{a.size_text}</p>}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {canManage && (

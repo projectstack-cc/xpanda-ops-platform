@@ -1,5 +1,5 @@
 // src/app/api/cutting/manage/cc-assignments/[id]/route.ts
-//   PATCH  /v2/api/cutting/manage/cc-assignments/[id] — edit label/target_chunks
+//   PATCH  /v2/api/cutting/manage/cc-assignments/[id] — edit label/target_chunks/size_text
 //   DELETE /v2/api/cutting/manage/cc-assignments/[id] — remove an assignment
 // Manager-only: gated by middleware (manufacturing.cutting.manage); header check is
 // defense-in-depth.
@@ -46,6 +46,19 @@ export async function PATCH(
       }
       fields.push("target_chunks = ?");
       values.push(Math.floor(targetChunks));
+    }
+
+    // cc-blocks-01: optional free-text size, ≤ 60 chars; an explicit "" (or whitespace) clears it.
+    if (body?.size_text !== undefined) {
+      const sizeText = body.size_text == null ? "" : String(body.size_text).trim();
+      if (sizeText.length > 60) {
+        return NextResponse.json(
+          { ok: false, error: "size_text must be 60 characters or fewer." },
+          { status: 400 }
+        );
+      }
+      fields.push("size_text = ?");
+      values.push(sizeText || null);
     }
 
     if (fields.length === 0) {

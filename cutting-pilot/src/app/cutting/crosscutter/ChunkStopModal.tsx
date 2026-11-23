@@ -1,7 +1,11 @@
 "use client";
+// Stop modal for the chunk board. cc (cc-blocks-01): "Blocks used this run" — the operator enters the
+// block IDs (optional; the count is the number of IDs) and onSubmit sends { block_ids }.
+// hc: "Holed this run" + required on-hand count (unchanged).
 import { useEffect, useState } from "react";
 import Modal from "@/components/Modal";
 import type { Board } from "./ChunkBoard";
+import BlockIdInput from "./BlockIdInput";
 
 interface Props {
   isOpen: boolean;
@@ -9,7 +13,11 @@ interface Props {
   variant: Board;
   label: string;
   currentOnHand?: number;
-  onSubmit: (values: { qty_done_delta?: number; holed_delta?: number; on_hand?: number }) => void;
+  sizeText?: string | null;
+  existingBlockIds?: string[];
+  blockPrefix: string;
+  onBlockPrefixChange: (prefix: string) => void;
+  onSubmit: (values: { block_ids?: string[]; holed_delta?: number; on_hand?: number }) => void;
   acting: boolean;
 }
 
@@ -19,16 +27,22 @@ export default function ChunkStopModal({
   variant,
   label,
   currentOnHand,
+  sizeText,
+  existingBlockIds,
+  blockPrefix,
+  onBlockPrefixChange,
   onSubmit,
   acting,
 }: Props) {
-  const [qtyDone, setQtyDone] = useState("");
+  const [blockIds, setBlockIds] = useState<string[]>([]);
+  const [pendingId, setPendingId] = useState<string | null>(null);
   const [holed, setHoled] = useState("");
   const [onHand, setOnHand] = useState("");
 
   useEffect(() => {
     if (isOpen) {
-      setQtyDone("");
+      setBlockIds([]);
+      setPendingId(null);
       setHoled("");
       setOnHand(currentOnHand != null ? String(currentOnHand) : "");
     }
@@ -39,8 +53,8 @@ export default function ChunkStopModal({
 
   function handleSubmit() {
     if (variant === "cc") {
-      const n = parseInt(qtyDone, 10);
-      onSubmit({ qty_done_delta: !isNaN(n) && n > 0 ? n : 0 });
+      // A valid ID typed but not yet added is included (operator tapped Stop without Add).
+      onSubmit({ block_ids: pendingId ? [...blockIds, pendingId] : blockIds });
     } else {
       const h = parseInt(holed, 10);
       const oh = parseInt(onHand, 10);
@@ -55,22 +69,22 @@ export default function ChunkStopModal({
     <Modal isOpen={isOpen} onClose={onClose} title={`Stop — ${label}`}>
       <div className="space-y-4">
         {variant === "cc" ? (
-          <div>
-            <label htmlFor="stop-qty-done" className="block text-sm font-medium text-text mb-1">
-              Chunks done this run
-              <span className="ml-1 text-xs text-muted font-normal">(optional)</span>
-            </label>
-            <input
-              id="stop-qty-done"
-              type="number"
-              min="0"
-              inputMode="numeric"
-              value={qtyDone}
-              onChange={(e) => setQtyDone(e.target.value)}
-              placeholder="0"
-              className="w-28 min-h-[44px] rounded border border-[var(--input-border)] bg-[var(--input-bg)] text-text px-3 py-2 text-sm font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
-            />
-          </div>
+          <>
+            {sizeText && <p className="-mt-2 text-sm text-muted">{sizeText}</p>}
+            {isOpen && (
+              <BlockIdInput
+                id="stop-block-ids"
+                label="Blocks used this run"
+                optional
+                value={blockIds}
+                onChange={setBlockIds}
+                existing={existingBlockIds}
+                prefix={blockPrefix}
+                onPrefixChange={onBlockPrefixChange}
+                onPendingChange={setPendingId}
+              />
+            )}
+          </>
         ) : (
           <>
             <div>

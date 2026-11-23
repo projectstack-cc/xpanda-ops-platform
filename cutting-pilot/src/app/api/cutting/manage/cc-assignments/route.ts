@@ -21,6 +21,14 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const label = String(body?.label || "").trim();
     const targetChunks = Number(body?.target_chunks);
+    // cc-blocks-01: optional free-text size (e.g. "174/24 (82/82)"), ≤ 60 chars, blank → NULL.
+    const sizeText = body?.size_text == null ? "" : String(body.size_text).trim();
+    if (sizeText.length > 60) {
+      return NextResponse.json(
+        { ok: false, error: "size_text must be 60 characters or fewer." },
+        { status: 400 }
+      );
+    }
 
     if (!label) {
       return NextResponse.json({ ok: false, error: "label is required." }, { status: 400 });
@@ -42,9 +50,9 @@ export async function POST(request: NextRequest) {
 
     await DB.prepare(
       `INSERT INTO cc_assignments
-         (id, label, target_chunks, qty_done, status, sort_order, created_by, created_at)
-       VALUES (?, ?, ?, 0, 'open', ?, ?, ?)`
-    ).bind(id, label, Math.floor(targetChunks), sortOrder, operatorName, now).run();
+         (id, label, size_text, target_chunks, qty_done, status, sort_order, created_by, created_at)
+       VALUES (?, ?, ?, ?, 0, 'open', ?, ?, ?)`
+    ).bind(id, label, sizeText || null, Math.floor(targetChunks), sortOrder, operatorName, now).run();
 
     return NextResponse.json({ ok: true, id });
   } catch (e: any) {

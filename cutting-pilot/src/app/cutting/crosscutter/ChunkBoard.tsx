@@ -14,12 +14,17 @@ export type Board = "cc" | "hc";
 export interface CcAssignment {
   id: string;
   label: string;
+  size_text: string | null;          // cc-blocks-01
   target_chunks: number;
   qty_done: number;
   status: "open" | "in_progress" | "complete";
   sort_order: number;
   busy_by: string | null;
+  block_ids: string[];               // cc-blocks-01: IDs already recorded (dupe warnings)
 }
+
+// cc-blocks-01: last-used "MM/DD-" block-ID prefix, remembered across modal opens and reloads.
+const BLOCK_PREFIX_KEY = "xpanda_cc_block_prefix_v1";
 
 export interface HcSlot {
   slot_key: string;
@@ -44,12 +49,47 @@ export default function ChunkBoard() {
   const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [blockPrefix, setBlockPrefix] = useState("");
 
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(BLOCK_PREFIX_KEY);
+      if (saved && /^\d{2}\/\d{2}-$/.test(saved)) setBlockPrefix(saved);
+    } catch {
+      // storage blocked — prefix just starts empty
+    }
+  }, []);
+
+  function changeBlockPrefix(prefix: string) {
+    setBlockPrefix(prefix);
+    try {
+      window.localStorage.setItem(BLOCK_PREFIX_KEY, prefix);
+    } catch {
+      // storage blocked — board state still holds it
+    }
+  }
+
+  // cc-blocks-01 server errors → floor-readable text.
+  function ccErrorText(data: any, fallback: string): string {
+    if (data?.error === "duplicate_block_id") {
+      return `Already recorded on this assignment: ${(data.duplicates ?? []).join(", ")}. Remove and try again.`;
+    }
+    if (data?.error === "invalid_block_id") {
+      return `Not valid block IDs (use MM/DD-XX): ${(data.invalid ?? []).join(", ")}.`;
+    }
+    if (data?.error === "duplicate_in_request") {
+      return `Entered twice: ${(data.duplicates ?? []).join(", ")}.`;
+    }
+    if (data?.error === "block_ids_required") return "Enter the block IDs you used.";
+    return data?.error || fallback;
+  }
   const [stopTarget, setStopTarget] = useState<{
     board: Board;
     ref_id: string;
     label: string;
     currentOnHand?: number;
+    sizeText?: string | null;
+    existingBlockIds?: string[];
   } | null>(null);
   const [completeTarget, setCompleteTarget] = useState<{
     board: Board;
@@ -57,6 +97,8 @@ export default function ChunkBoard() {
     label: string;
     qtyDone?: number;
     targetChunks?: number;
+    sizeText?: string | null;
+    existingBlockIds?: string[];
   } | null>(null);
 
   function showToast(msg: string, ok = true) {
@@ -130,10 +172,18 @@ export default function ChunkBoard() {
   }
 
   function openStop(board: Board, refId: string, label: string, currentOnHand?: number) {
-    setStopTarget({ board, ref_id: refId, label, currentOnHand });
+    const a = board === "cc" ? assignments.find((x) => x.id === refId) : undefined;
+    setStopTarget({
+      board,
+      ref_id: refId,
+      label,
+      currentOnHand,
+      sizeText: a?.size_text ?? null,
+      existingBlockIds: a?.block_ids ?? [],
+    });
   }
 
-  async function submitStop(values: { qty_done_delta?: number; holed_delta?: number; on_hand?: number }) {
+  async function submitStop(values: { block_ids?: string[]; holed_delta?: number; on_hand?: number }) {
     if (!stopTarget) return;
     setActing(true);
     try {
@@ -148,7 +198,8 @@ export default function ChunkBoard() {
         setStopTarget(null);
         await fetchAll(true);
       } else {
-        showToast(data.error || "Stop failed.", false);
+        // Modal stays open so the operator can fix the IDs.
+        showToast(ccErrorText(data, "Stop failed."), false);
       }
     } catch {
       showToast("Network error.", false);
@@ -158,10 +209,19 @@ export default function ChunkBoard() {
   }
 
   function openComplete(board: Board, refId: string, label: string, qtyDone?: number, targetChunks?: number) {
-    setCompleteTarget({ board, ref_id: refId, label, qtyDone, targetChunks });
+    const a = board === "cc" ? assignments.find((x) => x.id === refId) : undefined;
+    setCompleteTarget({
+      board,
+      ref_id: refId,
+      label,
+      qtyDone,
+      targetChunks,
+      sizeText: a?.size_text ?? null,
+      existingBlockIds: a?.block_ids ?? [],
+    });
   }
 
-  async function submitComplete(values: { qty_done_delta?: number }) {
+  async function submitComplete(values: { block_ids?: string[] }) {
     if (!completeTarget) return;
     const { board, ref_id } = completeTarget;
     setActing(true);
@@ -173,11 +233,12 @@ export default function ChunkBoard() {
       });
       const data = await res.json();
       if (data.ok) {
-        showToast(board === "cc" ? `Assignment complete — ${data.qty_done} chunks.` : "Run complete.");
+        showToast(board === "cc" ? `Assignment complete — ${data.qty_done} blocks.` : "Run complete.");
         setCompleteTarget(null);
         await fetchAll(true);
       } else {
-        showToast(data.error || "Failed.", false);
+        // Modal stays open so the operator can fix the IDs.
+        showToast(ccErrorText(data, "Failed."), false);
       }
     } catch {
       showToast("Network error.", false);
@@ -186,13 +247,13 @@ export default function ChunkBoard() {
     }
   }
 
-  async function createAssignment(label: string, targetChunks: number) {
+  async function createAssignment(label: string, targetChunks: number, sizeText: string) {
     setActing(true);
     try {
       const res = await fetch("/v2/api/cutting/manage/cc-assignments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label, target_chunks: targetChunks }),
+        body: JSON.stringify({ label, target_chunks: targetChunks, size_text: sizeText }),
       });
       const data = await res.json();
       if (data.ok) {
@@ -207,7 +268,7 @@ export default function ChunkBoard() {
     }
   }
 
-  async function updateAssignment(id: string, patch: { label?: string; target_chunks?: number }) {
+  async function updateAssignment(id: string, patch: { label?: string; target_chunks?: number; size_text?: string }) {
     setActing(true);
     try {
       const res = await fetch(`/v2/api/cutting/manage/cc-assignments/${id}`, {
@@ -388,11 +449,15 @@ export default function ChunkBoard() {
         variant={stopTarget?.board ?? "cc"}
         label={stopTarget?.label ?? ""}
         currentOnHand={stopTarget?.currentOnHand}
+        sizeText={stopTarget?.sizeText}
+        existingBlockIds={stopTarget?.existingBlockIds}
+        blockPrefix={blockPrefix}
+        onBlockPrefixChange={changeBlockPrefix}
         onSubmit={submitStop}
         acting={acting}
       />
 
-      {/* Complete — shared by both boards; cc asks chunks cut this run */}
+      {/* Complete — shared by both boards; cc asks for the block IDs used this run */}
       <ChunkCompleteModal
         isOpen={!!completeTarget}
         onClose={() => setCompleteTarget(null)}
@@ -400,6 +465,10 @@ export default function ChunkBoard() {
         label={completeTarget?.label ?? ""}
         qtyDone={completeTarget?.qtyDone}
         targetChunks={completeTarget?.targetChunks}
+        sizeText={completeTarget?.sizeText}
+        existingBlockIds={completeTarget?.existingBlockIds}
+        blockPrefix={blockPrefix}
+        onBlockPrefixChange={changeBlockPrefix}
         onSubmit={submitComplete}
         acting={acting}
       />
