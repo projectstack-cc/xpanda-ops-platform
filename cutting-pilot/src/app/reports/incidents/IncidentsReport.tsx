@@ -9,7 +9,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Bar, CartesianGrid, Cell, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { ChevronDown, ChevronRight, ClipboardList, FileText, Printer, RefreshCw, Scissors } from "lucide-react";
+import { Boxes, ChevronDown, ChevronRight, ClipboardList, FileText, Printer, RefreshCw, Scissors } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
 import MetricTile from "@/components/dashboard/MetricTile";
 import DashboardToolbar from "@/components/dashboard/DashboardToolbar";
@@ -163,6 +163,10 @@ export default function IncidentsReport({ userName, isAdmin, permissions }: Prop
             <Link href="/reports/scrap" className={HEADER_BTN}>
               <ClipboardList size={14} className="text-muted" aria-hidden="true" />
               Scrap
+            </Link>
+            <Link href="/reports/crosscutter" className={HEADER_BTN}>
+              <Boxes size={14} className="text-muted" aria-hidden="true" />
+              Cross Cutter
             </Link>
             <button type="button" className={HEADER_BTN} onClick={() => window.print()}>
               <Printer size={14} className="text-muted" aria-hidden="true" />

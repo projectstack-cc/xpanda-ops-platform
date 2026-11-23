@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { ClipboardList, Printer, RefreshCw, Scissors, TriangleAlert } from "lucide-react";
+import { Boxes, ClipboardList, Printer, RefreshCw, Scissors, TriangleAlert } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
 import MetricTile from "@/components/dashboard/MetricTile";
 import DashboardToolbar from "@/components/dashboard/DashboardToolbar";
@@ -139,6 +139,10 @@ export default function ScrapReport({ userName, isAdmin, permissions }: Props) {
             <Link href="/reports/incidents" className={HEADER_BTN}>
               <TriangleAlert size={14} className="text-muted" aria-hidden="true" />
               Incidents
+            </Link>
+            <Link href="/reports/crosscutter" className={HEADER_BTN}>
+              <Boxes size={14} className="text-muted" aria-hidden="true" />
+              Cross Cutter
             </Link>
             <button type="button" className={HEADER_BTN} onClick={() => window.print()}>
               <Printer size={14} className="text-muted" aria-hidden="true" />
