@@ -380,6 +380,8 @@
 > fallback. Both boards are in **active testing**; legacy retirement (jb-09) has no date. Reuses `jobs` +
 > `job_line_items`; no new schema.
 
+- [ ] **Orders desk:** ord-dash-02 UI (`/v2/orders/desk`, dark), ord-dash-03 batch slip drop (flag slips mentioning OFFLOAD / DELIVER / LABEL that yield no zones, per slip-parse-08's BACKLOG item), ord-dash-04 cutover (held). ord-dash-01 (`GET /v2/api/orders/desk`) shipped.
+- [ ] **Orders desk — density conflicts aren't persisted.** If the desk should flag them, store a per-line flag at create (schema change).
 - [ ] **jb-11 follow-up — add the Priority control to `/v2/orders` (order entry)** so priority can be set at
   creation (today it defaults to Normal). Reuse `components/board/PrioritySelect.tsx` + `lib/priority.ts`.
 - [ ] **jb-06 follow-up — move `PartsPicker` onto the shared `SearchPickerModal`** (one picker primitive).
