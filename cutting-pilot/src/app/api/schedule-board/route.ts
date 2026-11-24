@@ -73,7 +73,10 @@ async function fetchChunksByJob(db: D1Database, jobIds: string[]): Promise<Map<s
                     WHERE cpl.job_id = j.id AND cpl.line IN ('Main Line','Blue Line')
                       AND cpl.source = 'manual' AND cpl.qty_target IS NOT NULL
                     LIMIT 1),
-                  j.hb_chunks_required
+                  -- hbplan-01: a saved custom chunk list's total wins over the geometry count, only
+                  -- while the job is still HB. json_valid guards json_extract (it throws on bad JSON).
+                  CASE WHEN j.hb_chunks_required IS NULL THEN NULL
+                       ELSE COALESCE(CASE WHEN json_valid(j.hb_chunk_plan) THEN json_extract(j.hb_chunk_plan,'$.total') END, j.hb_chunks_required) END
                 ) AS chunks
            FROM jobs j
           WHERE j.id IN (${placeholders})`

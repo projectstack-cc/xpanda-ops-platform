@@ -4,6 +4,7 @@
 // so the board reflects the job board without requiring a separate migration step.
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/db";
+import { parsePlan } from "@/lib/hbChunkPlan";
 
 // P295: /v2/cutting is now Main Line / Blue Line only. Cross Cutter + Hole Cutter moved to the
 // standalone /v2/cutting/crosscutter board (P292–P294); Laminate dropped from v2 cutting.
@@ -24,7 +25,7 @@ export async function GET(request: Request) {
     const jobRows = await DB.prepare(
       `SELECT j.id, j.customer, j.invoice_number, j.po_number, j.ship_date,
               j.status, j.priority, j.priority_level, j.processes, j.cutting_instructions,
-              j.hb_chunks_required
+              j.hb_chunks_required, j.hb_chunk_plan
        FROM jobs j
        WHERE j.archived_at IS NULL
          AND j.status IN ('not_started','in_production')
@@ -354,7 +355,10 @@ export async function GET(request: Request) {
     // cutting_lines.qty_target (overwrite — geometry can change between reads).
     const hbStmts: ReturnType<typeof DB.prepare>[] = [];
     for (const job of jobs) {
-      const geo = (job as any).hb_chunks_required;
+      // hbplan-01: a saved custom chunk list's total replaces the geometry count — only while the
+      // job is still HB (a stale plan on a job with no HB lines left stays ignored).
+      const hbReq = (job as any).hb_chunks_required;
+      const geo = hbReq == null ? null : (parsePlan((job as any).hb_chunk_plan)?.total ?? hbReq);
       if (geo == null) continue; // not an HB job
       for (const line of job.requiredLines) {
         if (!GUILLOTINE_LINES.has(line)) continue;
@@ -463,6 +467,7 @@ export async function GET(request: Request) {
       });
       return {
         ...job,
+        hb_chunk_plan: undefined, // hbplan-01: internal to the count wiring above, not part of the response
         lines,
         line_items: lineItemsByJob.get(job.id) || [],
         is_taper: taperInfoByJob.get(job.id)?.is_taper ?? false,

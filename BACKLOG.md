@@ -657,6 +657,10 @@ schedule badge):**
   `qty_target: null` via `hb-chunk-override`).
 - [ ] When the hole-cutter dashboard reaches the floor, switch `/v2/schedule`'s chunk display from
   required to on-hand vs cut (`hc_slots`).
+- [ ] **hbplan-01 follow-up — legacy Classic Job Board cut list prints only the auto nest.** `jobs/index.html`
+  ignores `jobs.hb_chunk_plan` (custom chunk lists are v2-only). Leave as is unless asked.
+- [ ] **hbplan-01 follow-up — drop the dormant auto-nest chunk page** from the v2 cut list once floor adoption
+  of custom chunk lists is confirmed (Steve's call). The auto nest stays the fallback until then.
 
 ---
 
