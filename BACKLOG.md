@@ -661,13 +661,6 @@ schedule badge):**
   ignores `jobs.hb_chunk_plan` (custom chunk lists are v2-only). Leave as is unless asked.
 - [ ] **hbplan-01 follow-up — drop the dormant auto-nest chunk page** from the v2 cut list once floor adoption
   of custom chunk lists is confirmed (Steve's call). The auto nest stays the fallback until then.
-- [ ] **hbplan-02 follow-up — the `/v2/orders` post-save cut list ignores a custom chunk list.** `OrderEntryForm`
-  builds its cut list from the orders POST/PUT payload, which doesn't carry `jobs.hb_chunk_plan`, so it passes
-  `null` and prints the auto chunk page. Re-editing an order that already has a custom list therefore prints the
-  auto page there (the board's View / Edit cut lists are correct). Fix by returning `hb_chunk_plan` from the orders
-  routes or re-reading `GET /v2/api/board/:id` before printing.
-- [ ] **hbplan-02 follow-up — the cutting board doesn't show the custom recipe.** Main/Blue Line operators see the
-  plan's chunk total as their target, but not the groups themselves; they still need the printed cut list.
 
 ---
 

@@ -4,7 +4,7 @@
 // so the board reflects the job board without requiring a separate migration step.
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/db";
-import { parsePlan } from "@/lib/hbChunkPlan";
+import { hbChunkListView, parsePlan, type HbChunkListView } from "@/lib/hbChunkPlan";
 
 // P295: /v2/cutting is now Main Line / Blue Line only. Cross Cutter + Hole Cutter moved to the
 // standalone /v2/cutting/crosscutter board (P292–P294); Laminate dropped from v2 cutting.
@@ -440,6 +440,26 @@ export async function GET(request: Request) {
       (job as any).progress = progressByJob.get(job.id) || {};
     }
 
+    // hbplan-03: the custom chunk list as the board shows it (Main/Blue Line operators). Only jobs
+    // that are still HB and have a saved plan; the breakdown (can be large) is read separately for
+    // just those jobs so the main jobs SELECT stays lean. A bad plan/breakdown gives null for that
+    // job (hbChunkListView never throws), never a failed queue.
+    const chunkListByJob = new Map<string, HbChunkListView | null>();
+    const planJobIds = jobs
+      .filter((j: any) => j.hb_chunks_required != null && j.hb_chunk_plan != null)
+      .map((j: any) => j.id as string);
+    if (planJobIds.length) {
+      const bdRows = await allByJobIds<{ id: string; hb_chunk_breakdown: string | null }>(
+        (ph) => `SELECT id, hb_chunk_breakdown FROM jobs WHERE id IN (${ph}) AND hb_chunk_plan IS NOT NULL`,
+        planJobIds
+      );
+      const bdById = new Map(bdRows.results.map((r) => [r.id, r.hb_chunk_breakdown]));
+      for (const j of jobs as any[]) {
+        if (!planJobIds.includes(j.id)) continue;
+        chunkListByJob.set(j.id, hbChunkListView(j.hb_chunk_plan, bdById.get(j.id) ?? null));
+      }
+    }
+
     const queue = jobs.map((job: any) => {
       const jobLineMap = linesByJob.get(job.id) || new Map();
       const lines = job.requiredLines.map((lineName: string) => {
@@ -467,7 +487,8 @@ export async function GET(request: Request) {
       });
       return {
         ...job,
-        hb_chunk_plan: undefined, // hbplan-01: internal to the count wiring above, not part of the response
+        hb_chunk_plan: undefined, // raw plan JSON stays out of the response (hbplan-01)
+        hb_chunk_list: (chunkListByJob.get(job.id) ?? null) as HbChunkListView | null, // hbplan-03
         lines,
         line_items: lineItemsByJob.get(job.id) || [],
         is_taper: taperInfoByJob.get(job.id)?.is_taper ?? false,

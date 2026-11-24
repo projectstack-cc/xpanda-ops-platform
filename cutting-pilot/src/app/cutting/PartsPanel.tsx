@@ -1,5 +1,8 @@
 "use client";
+// hbplan-03: on HB guillotine lines (Main/Blue) a saved custom chunk list is shown read-only under
+// "Chunks to cut" (HbChunkList below) for operators and managers alike. Auto-nest jobs unchanged.
 import type { CuttingJob } from "./types";
+import type { HbChunkListView } from "@/lib/hbChunkPlan";
 
 interface Props {
   job: CuttingJob;
@@ -11,6 +14,44 @@ interface Props {
   // P384: manager-gate for the HB guillotine (Main/Blue) manual chunk override — independent of
   // `readOnly` (clock-in state), since a manager sets this without being clocked into the line.
   canManageChunks?: boolean;
+}
+
+// hbplan-03: the custom chunk list, display only. Sized for a 7" tablet at arm's length (≥16px).
+function HbChunkList({ list, qtyTarget }: { list: HbChunkListView; qtyTarget: number | null }) {
+  const mismatch = [
+    list.short.length ? `short ${list.short.join(", ")}` : "",
+    list.over.length ? `over ${list.over.join(", ")}` : "",
+  ].filter(Boolean).join("; ");
+  return (
+    <div className="mx-3 mb-3 rounded border border-border px-3 py-2.5 space-y-2">
+      {mismatch && (
+        <p
+          role="status"
+          className="rounded border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)] px-3 py-2 text-base font-semibold"
+        >
+          List doesn&apos;t match the order — {mismatch}. Check with your manager.
+        </p>
+      )}
+      <span className="block text-xs font-semibold uppercase tracking-wide text-muted">
+        Chunk list · <span className="font-mono tabular-nums">{list.total}</span> chunks
+      </span>
+      <ul className="divide-y divide-[var(--line)]">
+        {list.groups.map((g, i) => (
+          <li key={i} className="flex items-baseline gap-3 py-2 font-mono tabular-nums">
+            <span className="shrink-0 min-w-[3.5rem] text-2xl font-bold text-text">{g.count}×</span>
+            <span className="flex-1 min-w-0 text-lg text-text whitespace-pre-wrap">{g.recipe}</span>
+            <span className="shrink-0 text-base text-muted">{g.fill}&quot;</span>
+          </li>
+        ))}
+      </ul>
+      {qtyTarget != null && qtyTarget !== list.total && (
+        <p className="text-base text-muted">
+          Target overridden to <span className="font-mono tabular-nums">{qtyTarget}</span> chunks — list total is{" "}
+          <span className="font-mono tabular-nums">{list.total}</span>.
+        </p>
+      )}
+    </div>
+  );
 }
 
 // Docked parts checklist for a single cutting line (the operator's clocked-in line).
@@ -111,8 +152,12 @@ export default function PartsPanel({
             (line === "Main Line" || line === "Blue Line") && job.hb_chunks_required != null;
 
           if (isHbGuillotine) {
+            const chunkList = job.hb_chunk_list ? (
+              <HbChunkList list={job.hb_chunk_list} qtyTarget={lineRow.qty_target ?? null} />
+            ) : null;
             if (!canManageChunks) {
               return (
+                <>
                 <div className="m-3 rounded border border-border px-3 py-2.5">
                   <span className="text-xs font-semibold uppercase tracking-wide text-muted">
                     Chunks to cut
@@ -121,9 +166,12 @@ export default function PartsPanel({
                     {lineRow.qty_target ?? "—"}
                   </p>
                 </div>
+                {chunkList}
+                </>
               );
             }
             return (
+              <>
               <div className="m-3 rounded border border-border px-3 py-2.5">
                 <span className="text-xs font-semibold uppercase tracking-wide text-muted">
                   Chunks to cut
@@ -146,6 +194,8 @@ export default function PartsPanel({
                 </div>
                 <p className="text-xs text-muted mt-2">Manual override — overrides the computed chunk count from order entry.</p>
               </div>
+              {chunkList}
+              </>
             );
           }
 

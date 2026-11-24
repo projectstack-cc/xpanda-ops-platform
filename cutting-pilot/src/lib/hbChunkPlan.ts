@@ -213,3 +213,34 @@ export function parsePlan(json: string | null | undefined): HbChunkPlan | null {
     return null;
   }
 }
+
+/** hbplan-03: the custom chunk list as the cutting board shows it — floor text per group, in plan
+ * order, plus the order mismatch. Built server-side so the queue response never carries the raw
+ * plan or breakdown JSON. */
+export interface HbChunkListView {
+  total: number;
+  groups: Array<{ count: number; recipe: string; fill: string }>;
+  short: string[];
+  over: string[];
+}
+
+/** hbplan-03: the board view of a saved plan. Null for no plan / an unparseable plan; never throws.
+ * A null or bad breakdown means nothing is "needed", so every planned piece reads as over. */
+export function hbChunkListView(planJson: string | null | undefined, breakdownJson: string | null | undefined): HbChunkListView | null {
+  try {
+    const plan = parsePlan(planJson);
+    if (!plan) return null;
+    const groups = plan.groups.map((g) => ({
+      count: g.count,
+      recipe: [...g.pieces]
+        .sort((a, b) => b.thickness - a.thickness)
+        .map((p) => `${p.qty}× ${formatThickness(p.thickness)}"`)
+        .join("  +  "),
+      fill: formatFill(groupFill(g)),
+    }));
+    const { short, over } = planMismatchParts(planVsNeeded(plan.groups, hbNeededByThickness(breakdownJson ?? null)));
+    return { total: plan.total, groups, short, over };
+  } catch {
+    return null;
+  }
+}

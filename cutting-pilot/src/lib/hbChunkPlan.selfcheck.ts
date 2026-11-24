@@ -13,6 +13,7 @@ import {
   parsePlan,
   formatFill,
   planMismatchParts,
+  hbChunkListView,
   type HbPlanGroup,
 } from "./hbChunkPlan";
 
@@ -102,6 +103,29 @@ for (const g of garbage) {
   }
 }
 check("parse: garbage -> null, never throws", allNull && !threw);
+
+// --- hbplan-03: hbChunkListView (the cutting board's read-only list) ---
+const planJson = (groups: HbPlanGroup[]) => JSON.stringify({ v: 1, groups, total: planTotal(groups), updated_by: "x", updated_at: "x" });
+const vMatch = hbChunkListView(planJson(exactPlan), bdNoNet.replace(',{"part_id":"p1","part_number":"HB-1","thickness":1,"qty":6}', ""));
+check("view: matching plan -> total, empty short/over", !!vMatch && vMatch.total === 7 && vMatch.short.length === 0 && vMatch.over.length === 0, vMatch);
+check("view: groups in plan order with fill", !!vMatch && JSON.stringify(vMatch.groups) === JSON.stringify([{ count: 6, recipe: '12× 4"', fill: "48.9" }, { count: 1, recipe: '10× 2"', fill: "20.7" }]), vMatch?.groups);
+const vMis = hbChunkListView(planJson(shortPlan), JSON.stringify({ lines: lines.filter((l) => l.part_id !== "p1") }));
+check("view: short + over", !!vMis && JSON.stringify(vMis.short) === JSON.stringify(['12 × 4"']) && JSON.stringify(vMis.over) === JSON.stringify(['2 × 1"']), vMis);
+check("view: recipe thickest first", !!vMis && vMis.groups[1].recipe === '10× 2"  +  2× 1"', vMis?.groups[1]);
+const vOrder = hbChunkListView(planJson([{ count: 2, pieces: [{ thickness: 1, qty: 3 }, { thickness: 4, qty: 2 }, { thickness: 2, qty: 1 }] }]), null);
+check("view: unsorted pieces render thickest first", vOrder?.groups[0].recipe === '2× 4"  +  1× 2"  +  3× 1"', vOrder?.groups[0]);
+check("view: null breakdown -> everything planned is over", !!vOrder && vOrder.short.length === 0 && JSON.stringify(vOrder.over) === JSON.stringify(['4 × 4"', '2 × 2"', '6 × 1"']), vOrder);
+let viewThrew = false;
+let viewNulls = true;
+for (const g of [null, undefined, "", "{", '{"v":1,"groups":[]}', "[1,2]"]) {
+  try {
+    if (hbChunkListView(g as any, bdNoNet) !== null) viewNulls = false;
+  } catch {
+    viewThrew = true;
+  }
+}
+check("view: garbage plan -> null, never throws", viewNulls && !viewThrew);
+check("view: garbage breakdown never throws", hbChunkListView(planJson(exactPlan), "{bad") !== null);
 
 const failed = results.filter((r) => !r.pass);
 for (const r of results) console.log(`${r.pass ? "PASS" : "FAIL"}  ${r.name}${r.pass ? "" : `  (${r.detail})`}`);

@@ -1,3 +1,5 @@
+import type { HbChunkListView } from "@/lib/hbChunkPlan";
+
 export interface CuttingLine {
   line: string;
   line_status: "not_started" | "in_progress" | "complete";
@@ -45,4 +47,6 @@ export interface CuttingJob {
   progress: Record<string, Record<string, { completed: boolean; completed_qty: number | null }>>;
   assigned_to_me?: boolean;
   hb_chunks_required: number | null;
+  // hbplan-03: the custom chunk list (server-built view; null/absent = auto nest).
+  hb_chunk_list?: HbChunkListView | null;
 }

@@ -235,8 +235,7 @@ export default function OrderEntryForm({ userName, isAdmin, permissions, embedde
       density: string;
     }>;
     hb_chunk_breakdown: string | null;
-    // hbplan-02: the orders POST/PUT payload doesn't carry jobs.hb_chunk_plan, so this is always
-    // null here (the post-save cut list prints the auto chunk page) — see BACKLOG.md.
+    // hbplan-03: always null — this form only creates orders, and a custom chunk list can only be saved afterwards from the board edit modal.
     hb_chunk_plan: string | null;
   } | null>(null);
   const [printing, setPrinting] = useState(false);

@@ -732,6 +732,20 @@ current series).
 
 ## Orders (v2)
 
+- **hbplan-03 — custom chunk list on the cutting board + /v2/orders cut-list item closed (Next/Cloudflare Platform Agent §9a for the queue API, React Component Agent §9b for the board UI).** No migration, no new permission; legacy untouched.
+  - **Queue API (`api/cutting/queue`).** Each job now carries `hb_chunk_list` (`{total, groups:[{count, recipe, fill}], short, over}`), or null when there's no valid plan or the job is no longer HB (same rule as the count wiring). The raw `hb_chunk_plan` stays out of the response. `hb_chunk_breakdown` is not added to the main jobs SELECT; one extra chunked read (`allByJobIds`) fetches it only for jobs that have a plan, and is skipped when none do.
+  - **Pure view — `hbChunkListView(planJson, breakdownJson)` in `lib/hbChunkPlan.ts`.** Recipe text is thickest first (`6× 4"  +  3× 2"`), fill comes from `formatFill(groupFill)`, and short/over from `planMismatchParts`. It never throws: a bad plan gives null, and a bad or null breakdown means nothing is needed, so every planned piece reads as over. `hbChunkPlan.selfcheck.ts` is now 38/38.
+  - **Board UI (`app/cutting/PartsPanel.tsx`).** On Main/Blue Line HB jobs, a read-only **Chunk list** block sits under "Chunks to cut" for both operators and managers, through one local `HbChunkList` component.
+    - Header `CHUNK LIST · N chunks`, then one row per group in plan order: big bold `12×`, the recipe, and a muted fill. Mono tabular figures, text ≥16px for a 7" tablet.
+    - A mismatched list shows a warn banner: "List doesn't match the order — short …; over …. Check with your manager."
+    - When a manager override differs from the list total: "Target overridden to N chunks — list total is M."
+    - Auto-nest jobs look exactly as before. `app/cutting/types.ts` gains `hb_chunk_list?: HbChunkListView | null`.
+  - **Part B — the /v2/orders cut-list follow-up was moot.** `OrderEntryForm` only POSTs new orders (`/v2/api/orders`; confirmed by grep: its only PUTs are the load-times / load-carriers sub-routes). A just-created order can't have a custom list yet, so `hb_chunk_plan: null` there is correct. The comment now says so. No functional change.
+  - **Verified.**
+    - Selfcheck 38/38, `tsc --noEmit`, `npm run cf-build` green (on-color guard OK).
+    - `next dev` with the real queue route against local D1 (column added locally, one test plan seeded then removed): 200, no `hb_chunk_plan` / `hb_chunk_breakdown` keys, the planned job carries its view.
+    - Playwright with the queue mocked at tablet portrait: light as admin (manager override box) and dark as a non-manager. A matching list shows the list only; a mismatched list with an override (9 vs 6) shows the banner and the override line; an auto-nest job shows no list.
+
 - **hbplan-02 — custom chunk list editor + cut list printing (React Component Agent §9b for the UI, Next/Cloudflare Platform Agent §9a for `cutList.ts`).** It builds on hbplan-01 and needs the same `jobs.hb_chunk_plan` migration. No API, middleware or permission change; legacy is untouched.
   - **Editor — new `components/board/HbChunkPlanSection.tsx`.** Mounted in `OrderEditModal` right after the floor stock section. It renders only for HB jobs and is collapsible.
     - **Header chip.** "Auto (max yield)", "Custom · N chunks" (success) or "Custom · doesn't match order" (warn).
