@@ -20,6 +20,17 @@ export function wallClockOrdinal(w: WallClock): number {
   return days * 1440 + w.minutes;
 }
 
+/**
+ * late-pickup-05: a blank ORDER ship date (jobs.ship_date NULL/'') means "not scheduled" (e.g. the
+ * order is on hold), so the load gets no pickup and can never be late, even if the load still carries
+ * its own loading_assignments.ship_date from when it was scheduled. Otherwise the COALESCE'd ship day
+ * (load's own date first) is used unchanged.
+ */
+export function pickupShipDay(jobShipDate: string | null, shipDay: string | null): string | null {
+  if (jobShipDate == null || jobShipDate.trim() === "") return null;
+  return shipDay;
+}
+
 export interface PickupInfo {
   date: string;
   minutes: number;
@@ -61,7 +72,8 @@ const COMMON_COLS = `la.id AS assignment_id, la.bay_id, la.location,
          la.trailer_number, la.loading_status, la.load_number,
          j.customer, j.invoice_number, j.load_count, j.delivery_time,
          j.ship_to_street, j.ship_to_street2, j.ship_to_city, j.ship_to_state, j.ship_to_zip,
-         substr(COALESCE(la.ship_date, j.ship_date), 1, 10) AS ship_day`;
+         substr(COALESCE(la.ship_date, j.ship_date), 1, 10) AS ship_day,
+         j.ship_date AS job_ship_date`;
 
 /**
  * Every load on the dock right now: bay loads (same population the TV board shows) + yard loads
@@ -112,7 +124,12 @@ export async function fetchDockLoads(DB: D1Database, nowMs?: number): Promise<Do
       load_number: row.load_number ?? 1,
       load_count: row.load_count ?? null,
       ship_day: row.ship_day ?? null,
-      pickup: evaluatePickup(row.delivery_time ?? null, row.ship_day ?? null, durationSec, now),
+      pickup: evaluatePickup(
+        row.delivery_time ?? null,
+        pickupShipDay(row.job_ship_date ?? null, row.ship_day ?? null),
+        durationSec,
+        now
+      ),
     };
   });
 }

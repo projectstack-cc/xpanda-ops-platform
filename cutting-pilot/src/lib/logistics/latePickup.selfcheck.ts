@@ -2,7 +2,7 @@
 // Guarded dev self-check for latePickup.ts + etNowWallClock (late-pickup-01). Mirrors
 // deliveryTime.selfcheck.ts's shape: a check()/results table, one exported run*SelfCheck()
 // function. Not part of the production build path.
-import { evaluatePickup, wallClockOrdinal } from "./latePickup";
+import { evaluatePickup, pickupShipDay, wallClockOrdinal } from "./latePickup";
 import { etNowWallClock } from "@/lib/etDateTime";
 
 interface CheckResult {
@@ -44,6 +44,13 @@ export function runLatePickupSelfCheck(): { pass: boolean; results: CheckResult[
   const nextDay = evaluatePickup("Wed 6:00AM", ship, 6 * 3600, at(0, "2026-09-30"));
   eq("midnight rollback late across day", nextDay?.late, true);
   eq("midnight rollback viewed next day → prefix", nextDay?.label, "Tue 11:30 PM");
+  // late-pickup-05: blank order ship date → no pickup day (held order never late).
+  eq("hold: null order date → null", pickupShipDay(null, ship), null);
+  eq("hold: blank order date → null", pickupShipDay("", ship), null);
+  eq("hold: whitespace order date → null", pickupShipDay("  ", ship), null);
+  eq("dated order → load's day kept", pickupShipDay("2026-09-30", ship), ship);
+  eq("held + past load day → evaluatePickup null (not late)",
+    evaluatePickup("10:00 AM", pickupShipDay("", ship), 3000, at(900)), null);
   eq("ordinal spans days", wallClockOrdinal(at(0, "2026-09-30")) - wallClockOrdinal(at(1380)), 60);
 
   // etNowWallClock — EDT (UTC−4) and EST (UTC−5).

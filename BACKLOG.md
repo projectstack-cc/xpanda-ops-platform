@@ -468,6 +468,7 @@
 
 ## Loading Board (v2)
 
+- [ ] [Loading Board (v2)] **late-pickup-05 follow-up — no real "on hold" status.** A blank order ship date is the hold signal today. If holds become common, consider an explicit hold flag on jobs (board badge + suppression) instead of relying on a cleared date.
 - [ ] Extract a shared `components/tv/` (freshness-clock) used by `/v2/schedule`, `/v2/loading` and (prod-d-04) `/v2/production/tv` — a third board with its own LoadingBoard-style freshness logic (2-min stale) plus a copy of ScheduleBoard's cursor hide — currently each board is self-contained. (The pixel-shift half of this item was moot as of P304; the logo-sweep half is moot as of P306 — both removed from both boards entirely. Only the freshness clock remains a duplication candidate.)
 - [ ] **P263 follow-up — late/at-risk highlighting on the schedule board.** Explicitly out of scope for the first UI pass; would need a definition of "late"/"at-risk" (vs. `ship_date`? vs. status stalling?) before scoping.
 

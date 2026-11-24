@@ -2288,6 +2288,8 @@ current series).
 
 ## Loading Board (v2)
 
+- **late-pickup-05 — Fix: held orders (blank order ship date) no longer flash Late Pickup.** `latePickup.ts` selects `j.ship_date AS job_ship_date`. The new pure `pickupShipDay()` returns null when the order date is NULL/blank, so `evaluatePickup()` yields no pickup. The TV shows no time and no late flash, and the cron never notifies for the load. Loads keep their own `loading_assignments.ship_date` (not cleared), and the COALESCE precedence is unchanged for dated orders. Root cause: the COALESCE took the load's own date first, so clearing the order date on hold did nothing. Live trigger: INV 4596 (and INV 4527 on 11-05, which was worked around by NULLing per-load dates in D1). Self-check **23/23**. No migration.
+
 - **live-02 (cross-reference) — hazard stripe + Live load chip on dock cards; 10px stripe + LIVE LOAD pill on the
   bay-pair tablet.** Full entry under Schedule Board (v2).
 - **live-01 (cross-reference) — `/v2/api/loading-assignments` rows carry per-load `live_load`** (dock board + bay-pair
