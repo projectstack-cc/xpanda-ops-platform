@@ -3,6 +3,8 @@
 // for the v2 order-detail modal's "Print cut list" button. Do NOT change the PDF layout or
 // coordinates — this must stay pixel-parity with the legacy generator.
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import { HB_CHUNK_HEIGHT } from "./holeyNester";
+import { formatFill, formatThickness, groupFill, hbNeededByThickness, parsePlan, planMismatchParts, planVsNeeded } from "./hbChunkPlan";
 
 export interface CutListLineItem {
   part_number: string | null;
@@ -27,6 +29,8 @@ export interface CutListJob {
   carrier: string | null;
   line_items: CutListLineItem[];
   hb_chunk_breakdown?: string | null;
+  /** hbplan-02: a saved custom chunk list (jobs.hb_chunk_plan) — printed as CHUNK LIST instead of the auto page. */
+  hb_chunk_plan?: string | null;
 }
 
 function formatShipDate(dateStr: string | null): string {
@@ -303,19 +307,25 @@ export async function buildCutListPdf(job: CutListJob, opts: CutListOptions = {}
       return Array.from(groups.values()).sort((a, b) => a.order - b.order);
     };
 
-    const drawChunkTable = (page: PDFPage, yStart: number, rows: Array<{ count: number; sig: string }>) => {
+    // hbplan-02: rows may carry a `fill` (custom list), drawn right-aligned under a FILL heading with
+    // the recipe column narrowed to make room. Rows without one draw exactly as before.
+    const FILL_COL_W = 70;
+    const drawChunkTable = (page: PDFPage, yStart: number, rows: Array<{ count: number; sig: string; fill?: string }>) => {
       let p = page;
       let y = yStart;
+      const hasFill = rows.some((r) => r.fill !== undefined);
       p.drawText('CHUNKS', { x: margin, y, size: 9, font: fontBold, color: gray });
       p.drawText('CUT EACH INTO', { x: margin + 70, y, size: 9, font: fontBold, color: gray });
+      if (hasFill) drawRight(p, 'FILL', 9, fontBold, gray, y);
       y -= 16;
-      const sigMaxW = right - (margin + 70);
+      const sigMaxW = right - (margin + 70) - (hasFill ? FILL_COL_W : 0);
       for (const r of rows) {
         const sigLines = wrapText(r.sig, font, 10, sigMaxW);
         const sl = sigLines.length ? sigLines : [''];
         const need = sl.length * 14;
         if (y - need < margin + 6) { p = doc.addPage([pageW, pageH]); y = pageH - margin; }
         p.drawText(`${r.count}×`, { x: margin, y, size: 11, font: fontBold, color: black });
+        if (r.fill !== undefined) drawRight(p, r.fill, 10, font, black, y);
         let sy = y;
         for (const line of sl) { p.drawText(line, { x: margin + 70, y: sy, size: 10, font, color: black }); sy -= 14; }
         y -= need;
@@ -323,7 +333,66 @@ export async function buildCutListPdf(job: CutListJob, opts: CutListOptions = {}
       return { page: p, y };
     };
 
-    if (parsed && !parsed.net && Array.isArray(parsed.breakdown) && parsed.breakdown.length) {
+    // FLOOR STOCK block (pieces lines + the uncut-chunks line), shared by the auto page and the
+    // custom CHUNK LIST page (hbplan-02) — `chunksToCut` is what that page will cut new.
+    const drawFloorStock = (page: PDFPage, yStart: number, net: any, chunksToCut: number) => {
+      let p = page;
+      let y = yStart;
+      p.drawText('FLOOR STOCK', { x: margin, y, size: 9, font: fontBold, color: gray });
+      y -= 16;
+      for (const pc of (net.pcs || []) as any[]) {
+        const line = `${pc.part_number || ''}  (${pc.thickness}")   order ${pc.order_qty} · on hand ${pc.on_hand} · cut ${pc.to_cut}`;
+        if (y - 14 < margin + 6) { p = doc.addPage([pageW, pageH]); y = pageH - margin; }
+        p.drawText(line, { x: margin, y, size: 10, font, color: black });
+        y -= 14;
+      }
+      if (net.chunks_on_hand > 0) {
+        const line = `Uncut chunks on hand: ${net.chunks_on_hand}  ->  new chunks to cut: ${chunksToCut}`;
+        if (y - 14 < margin + 6) { p = doc.addPage([pageW, pageH]); y = pageH - margin; }
+        p.drawText(line, { x: margin, y, size: 10, font, color: black });
+        y -= 14;
+      }
+      return { page: p, y };
+    };
+
+    const plan = parsePlan(job.hb_chunk_plan);
+    if (plan) {
+      // hbplan-02: the manager's custom chunk list, in plan order, instead of the auto nest.
+      const warnInk = rgb(0.6, 0.11, 0.11);
+      const net = parsed && parsed.net ? parsed.net : null;
+      const diff = planVsNeeded(plan.groups, hbNeededByThickness(job.hb_chunk_breakdown));
+      const { short, over } = planMismatchParts(diff);
+
+      let p = doc.addPage([pageW, pageH]);
+      let y = pageH - margin;
+      p.drawText('CHUNK LIST', { x: margin, y, size: 12, font: fontBold, color: black });
+      y -= 6; hr(p, y); y -= 18;
+      p.drawText(`${plan.total} chunk${plan.total === 1 ? '' : 's'} · custom list · 48×24×${HB_CHUNK_HEIGHT}"`,
+        { x: margin, y, size: 10, font, color: gray });
+      if (short.length || over.length) {
+        y -= 16;
+        const parts = [short.length ? `short ${short.join(', ')}` : '', over.length ? `over ${over.join(', ')}` : ''].filter(Boolean);
+        for (const line of wrapText(`DOES NOT MATCH ORDER — ${parts.join('; ')}`, fontBold, 10, right - margin)) {
+          p.drawText(line, { x: margin, y, size: 10, font: fontBold, color: warnInk });
+          y -= 13;
+        }
+        y += 13;
+      }
+      y -= 8; hr(p, y); y -= 18;
+
+      if (net) {
+        ({ page: p, y } = drawFloorStock(p, y, net, Math.max(0, plan.total - (Number(net.chunks_on_hand) || 0))));
+        if (y - 8 < margin + 6) { p = doc.addPage([pageW, pageH]); y = pageH - margin; }
+        hr(p, y); y -= 18;
+      }
+
+      const rows = plan.groups.map((g) => ({
+        count: g.count,
+        sig: [...g.pieces].sort((a, b) => b.thickness - a.thickness).map((pc) => `${pc.qty}× ${formatThickness(pc.thickness)}"`).join('   +   '),
+        fill: `${formatFill(groupFill(g))}" fill`,
+      }));
+      drawChunkTable(p, y, rows);
+    } else if (parsed && !parsed.net && Array.isArray(parsed.breakdown) && parsed.breakdown.length) {
       const rows = groupChunkBreakdown(parsed.breakdown);
 
       let p = doc.addPage([pageW, pageH]);
@@ -345,20 +414,7 @@ export async function buildCutListPdf(job: CutListJob, opts: CutListOptions = {}
         { x: margin, y, size: 10, font, color: gray });
       y -= 8; hr(p, y); y -= 18;
 
-      p.drawText('FLOOR STOCK', { x: margin, y, size: 9, font: fontBold, color: gray });
-      y -= 16;
-      for (const pc of (net.pcs || []) as any[]) {
-        const line = `${pc.part_number || ''}  (${pc.thickness}")   order ${pc.order_qty} · on hand ${pc.on_hand} · cut ${pc.to_cut}`;
-        if (y - 14 < margin + 6) { p = doc.addPage([pageW, pageH]); y = pageH - margin; }
-        p.drawText(line, { x: margin, y, size: 10, font, color: black });
-        y -= 14;
-      }
-      if (net.chunks_on_hand > 0) {
-        const line = `Uncut chunks on hand: ${net.chunks_on_hand}  ->  new chunks to cut: ${net.chunks_to_cut}`;
-        if (y - 14 < margin + 6) { p = doc.addPage([pageW, pageH]); y = pageH - margin; }
-        p.drawText(line, { x: margin, y, size: 10, font, color: black });
-        y -= 14;
-      }
+      ({ page: p, y } = drawFloorStock(p, y, net, net.chunks_to_cut));
       {
         const line = `Order without floor stock: ${net.order_chunks_required} chunks`;
         if (y - 14 < margin + 6) { p = doc.addPage([pageW, pageH]); y = pageH - margin; }

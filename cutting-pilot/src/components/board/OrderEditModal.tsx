@@ -21,6 +21,7 @@ import PrioritySelect from "./PrioritySelect";
 import { fromPriorityChoice, toPriorityChoice } from "@/lib/priority";
 import { statusOptionsFor } from "@/lib/board/statusOptions";
 import HbFloorStockSection from "./HbFloorStockSection";
+import HbChunkPlanSection from "./HbChunkPlanSection";
 import OrderLinksSection from "./OrderLinksSection";
 import JobPrintsSection from "./JobPrintsSection";
 import OffloadZonesSection from "./OffloadZonesSection";
@@ -71,6 +72,7 @@ interface EditJob {
   has_packing_slip: boolean;
   hb_chunk_breakdown: string | null;
   hb_on_hand: string | null;
+  hb_chunk_plan: string | null;
   offload_zones_enabled: boolean;
   trailer_group_id: string | null;
 }
@@ -566,6 +568,7 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
           density: li.density,
         })),
         hb_chunk_breakdown: job.hb_chunk_breakdown,
+        hb_chunk_plan: job.hb_chunk_plan,
       };
       const pdfBytes = await buildCutListPdf(clJob, { includeChunkBreakdown: include });
       const blob = new Blob([pdfBytes as BlobPart], { type: "application/pdf" });
@@ -598,6 +601,23 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
   // two server-owned fields into BOTH the job and the dirty snapshot so this never marks the form
   // dirty, then invalidate the cut list exactly like the job-change reset so the next open
   // rebuilds with the new chunk breakdown.
+  // hbplan-02: chunk list saved / reverted (an immediate write, like floor stock). Same pattern as
+  // handleFloorStockChanged: patch job + dirty snapshot, invalidate the cut list.
+  function handleChunkPlanChanged(next: { hb_chunk_plan: string | null }) {
+    setJob((prev) => (prev ? { ...prev, ...next } : prev));
+    setOriginalSnapshot((prev) => {
+      if (!prev) return prev;
+      try { return JSON.stringify({ ...JSON.parse(prev), ...next }); } catch { return prev; }
+    });
+    if (cutListBlobUrlRef.current) {
+      try { URL.revokeObjectURL(cutListBlobUrlRef.current); } catch {}
+      cutListBlobUrlRef.current = null;
+    }
+    setCutListDoc(null);
+    setCutListOpen(false);
+    onSaved();
+  }
+
   function handleFloorStockChanged(next: { hb_on_hand: string | null; hb_chunk_breakdown: string | null }) {
     setJob((prev) => (prev ? { ...prev, ...next } : prev));
     setOriginalSnapshot((prev) => {
@@ -1166,6 +1186,15 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
             hbOnHand={job.hb_on_hand}
             canEdit={canEditJob}
             onChanged={handleFloorStockChanged}
+          />
+
+          {/* hbplan-02: custom chunk list (renders nothing for non-HB orders) */}
+          <HbChunkPlanSection
+            jobId={job.id}
+            hbChunkBreakdown={job.hb_chunk_breakdown}
+            hbChunkPlan={job.hb_chunk_plan ?? null}
+            canEdit={canEditJob}
+            onChanged={handleChunkPlanChanged}
           />
 
           {/* Cut List dropdown viewer (lifted from OrderDetailModal) */}

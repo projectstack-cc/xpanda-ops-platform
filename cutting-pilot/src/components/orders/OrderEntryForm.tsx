@@ -235,6 +235,9 @@ export default function OrderEntryForm({ userName, isAdmin, permissions, embedde
       density: string;
     }>;
     hb_chunk_breakdown: string | null;
+    // hbplan-02: the orders POST/PUT payload doesn't carry jobs.hb_chunk_plan, so this is always
+    // null here (the post-save cut list prints the auto chunk page) — see BACKLOG.md.
+    hb_chunk_plan: string | null;
   } | null>(null);
   const [printing, setPrinting] = useState(false);
   // cutlist-01: opt-in chunk breakdown on the post-save cut list — unchecked per saved order.
@@ -536,6 +539,7 @@ function setQtyAsBdftConvert(on: boolean) {
           density: li.density || null,
         })),
         hb_chunk_breakdown: savedOrder.hb_chunk_breakdown || null,
+        hb_chunk_plan: savedOrder.hb_chunk_plan,
       };
       const pdfBytes = await buildCutListPdf(job, { includeChunkBreakdown: includeChunks });
       const blob = new Blob([pdfBytes as BlobPart], { type: "application/pdf" });
@@ -782,6 +786,7 @@ function setQtyAsBdftConvert(on: boolean) {
           density: li.density,
         })),
         hb_chunk_breakdown: data?.job?.hb_chunk_breakdown ?? data?.hb_chunk_breakdown ?? null,
+        hb_chunk_plan: null,
       });
     } catch (e: any) {
       setError("Network error — couldn't reach the server.");

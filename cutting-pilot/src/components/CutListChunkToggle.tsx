@@ -1,6 +1,6 @@
 "use client";
 
-// cutlist-01: opt-in "Include chunk breakdown" checkbox for the cut list PDF. Shared by
+// cutlist-01: opt-in "Include chunk list" checkbox (label renamed in hbplan-02; behaviour unchanged) for the cut list PDF. Shared by
 // OrderDetailModal, OrderEditModal and OrderEntryForm — callers own the state and decide whether
 // to render it (only when the job has a non-empty hb_chunk_breakdown). Unchecked by default.
 
@@ -24,7 +24,7 @@ export default function CutListChunkToggle({ checked, onChange, disabled = false
         disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
       />
-      Include chunk breakdown
+      Include chunk list
     </label>
   );
 }

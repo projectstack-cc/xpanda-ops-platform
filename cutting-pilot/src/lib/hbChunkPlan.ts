@@ -100,6 +100,30 @@ export function groupFill(g: Pick<HbPlanGroup, "pieces">): number {
   return boards > 0 ? height + (boards - 1) * HB_KERF : 0;
 }
 
+/** hbplan-02: a fill height for display — one decimal, except an over-fill that would round to the
+ * limit itself (50.51–50.54") shows two, so "over" never reads "50.5" / 50.5"". */
+export function formatFill(fill: number): string {
+  const one = fill.toFixed(1);
+  return fill > HB_CHUNK_HEIGHT + EPS && Number(one) <= HB_CHUNK_HEIGHT ? fill.toFixed(2) : one;
+}
+
+/** hbplan-02: a thickness for display — 4 -> "4", 0.5 -> "0.5". */
+export function formatThickness(t: number): string {
+  return String(Number(t.toFixed(4)));
+}
+
+/** hbplan-02: the short / over parts of a plan-vs-needed diff, e.g. short ["12 × 4\""], over
+ * ["2 × 1\""] (plain `"` — the cut list's WinAnsi font can't encode ″). Thickest first. */
+export function planMismatchParts(rows: HbPlanDiffRow[]): { short: string[]; over: string[] } {
+  const short: string[] = [];
+  const over: string[] = [];
+  for (const r of rows) {
+    if (r.diff < 0) short.push(`${-r.diff} × ${formatThickness(r.thickness)}"`);
+    else if (r.diff > 0) over.push(`${r.diff} × ${formatThickness(r.thickness)}"`);
+  }
+  return { short, over };
+}
+
 /** Validates (and normalises) a submitted group list: count and qty integers ≥ 1, at least one
  * piece per group and one group overall, thicknesses from the order, duplicate thicknesses within a
  * group merged (thickest first), no group over the 50.5" chunk. To clear a plan send null instead. */
@@ -129,7 +153,7 @@ export function validatePlanGroups(
       .sort((a, b) => b[0] - a[0])
       .map(([thickness, qty]) => ({ thickness, qty }));
     const fill = groupFill({ pieces });
-    if (fill > HB_CHUNK_HEIGHT + EPS) return { ok: false, error: `${label} is ${fill.toFixed(1)}" — over the ${HB_CHUNK_HEIGHT}" chunk` };
+    if (fill > HB_CHUNK_HEIGHT + EPS) return { ok: false, error: `${label} is ${formatFill(fill)}" — over the ${HB_CHUNK_HEIGHT}" chunk` };
     out.push({ count, pieces });
   }
   return { ok: true, groups: out };

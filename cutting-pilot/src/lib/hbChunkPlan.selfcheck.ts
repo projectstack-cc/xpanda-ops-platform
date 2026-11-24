@@ -11,6 +11,8 @@ import {
   planMatches,
   planTotal,
   parsePlan,
+  formatFill,
+  planMismatchParts,
   type HbPlanGroup,
 } from "./hbChunkPlan";
 
@@ -61,7 +63,7 @@ check("validate: qty 0 rejected", /piece quantity/.test(err([{ count: 1, pieces:
 check("validate: fractional qty rejected", /piece quantity/.test(err([{ count: 1, pieces: [{ thickness: 4, qty: 2.5 }] }]) ?? ""));
 check("validate: thickness not on the order rejected", /3" isn't a Holey Board thickness/.test(err([{ count: 1, pieces: [{ thickness: 3, qty: 1 }] }]) ?? ""), err([{ count: 1, pieces: [{ thickness: 3, qty: 1 }] }]));
 const overG = [{ count: 1, pieces: [{ thickness: 4, qty: 1 }] }, { count: 2, pieces: [{ thickness: 4, qty: 12 }, { thickness: 2, qty: 1 }] }];
-check("validate: over-fill message", err(overG) === `Group 2 is ${groupFill(overG[1]).toFixed(1)}" — over the 50.5" chunk`, err(overG));
+check("validate: over-fill message", err(overG) === `Group 2 is ${formatFill(groupFill(overG[1]))}" — over the 50.5" chunk`, err(overG));
 check("validate: over-fill message text (12x4 + 1x2 = 50.9\")", err([{ count: 1, pieces: [{ thickness: 4, qty: 1 }] }, { count: 1, pieces: [{ thickness: 4, qty: 12 }, { thickness: 2, qty: 1 }] }]) === 'Group 2 is 50.9" — over the 50.5" chunk', err([{ count: 1, pieces: [{ thickness: 4, qty: 1 }] }, { count: 1, pieces: [{ thickness: 4, qty: 12 }, { thickness: 2, qty: 1 }] }]));
 check("validate: exact fit accepted", validatePlanGroups([{ count: 1, pieces: [{ thickness: exactT, qty: exactQty }] }], [exactT]).ok);
 check("validate: thickness tolerance 1e-9", validatePlanGroups([{ count: 1, pieces: [{ thickness: 4 + 1e-12, qty: 1 }] }], allowed).ok);
@@ -77,6 +79,13 @@ const sv = planVsNeeded(shortPlan, needed);
 check("mismatch: short 12 x 4\", over 2 x 1\" (thickness only on the plan side)", !planMatches(shortPlan, needed) && JSON.stringify(sv) === JSON.stringify([{ thickness: 4, needed: 72, planned: 60, diff: -12 }, { thickness: 2, needed: 10, planned: 10, diff: 0 }, { thickness: 1, needed: 0, planned: 2, diff: 2 }]), sv);
 const missing = planVsNeeded([{ count: 6, pieces: [{ thickness: 4, qty: 12 }] }], needed);
 check("mismatch: a needed thickness absent from the plan is listed short", missing.some((r) => r.thickness === 2 && r.diff === -10), missing);
+
+// --- hbplan-02 display helpers ---
+check("formatFill: one decimal normally", formatFill(49.04) === "49.0" && formatFill(50.5) === "50.5");
+check("formatFill: an over-fill rounding to the limit shows two decimals", formatFill(50.53) === "50.53" && formatFill(50.56) === "50.6", formatFill(50.53));
+const mp = planMismatchParts(sv);
+check("mismatch parts: short 12 x 4\", over 2 x 1\"", JSON.stringify(mp) === JSON.stringify({ short: ['12 × 4"'], over: ['2 × 1"'] }), JSON.stringify(mp));
+check("mismatch parts: a matching plan has none", JSON.stringify(planMismatchParts(planVsNeeded(exactPlan, needed))) === '{"short":[],"over":[]}');
 
 // --- parsePlan ---
 const good = JSON.stringify({ v: 1, groups: exactPlan, total: 7, updated_by: "Steve", updated_at: "2026-11-24 10:00:00" });

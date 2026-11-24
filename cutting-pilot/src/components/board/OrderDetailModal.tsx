@@ -39,6 +39,8 @@ interface DetailJob {
   has_packing_slip: boolean;
   bol_count: number;
   hb_chunk_breakdown: string | null;
+  /** hbplan-02: from GET /v2/api/board/:id — the cut list prints CHUNK LIST when set. */
+  hb_chunk_plan: string | null;
 }
 
 interface DetailResponse {

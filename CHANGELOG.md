@@ -732,6 +732,27 @@ current series).
 
 ## Orders (v2)
 
+- **hbplan-02 — custom chunk list editor + cut list printing (React Component Agent §9b for the UI, Next/Cloudflare Platform Agent §9a for `cutList.ts`).** It builds on hbplan-01 and needs the same `jobs.hb_chunk_plan` migration. No API, middleware or permission change; legacy is untouched.
+  - **Editor — new `components/board/HbChunkPlanSection.tsx`.** Mounted in `OrderEditModal` right after the floor stock section. It renders only for HB jobs and is collapsible.
+    - **Header chip.** "Auto (max yield)", "Custom · N chunks" (success) or "Custom · doesn't match order" (warn).
+    - **NEEDED strip.** One chip per thickness, net of floor pieces (`hbNeededByThickness`), updated live: `4": 72 · 60 planned · 12 left` / `+2 over` (warn), or ✓ success when exact.
+    - **Groups.** They start BLANK. Each row is `[count] chunks ×` plus piece chips `[qty] × [thickness ▾]`; the picker offers only the order's HB thicknesses. Each row has "+ size", remove, and a fill readout `49.0" / 50.5"` (`groupFill`). The readout turns danger-ink when over and disables Save.
+    - **Save.** PUTs `{groups}`, and server 400s are shown verbatim. A mismatch line ("Short 12 × 4" · over 2 × 1"") shows above Save, so saving a mismatched list is a deliberate choice.
+    - **Revert to auto.** Uses an inline confirm and PUTs `{groups:null}`.
+    - **Other behaviour.** It seeds from a saved plan and never auto-edits it. When floor stock has chunks on hand, it shows "Uncut chunks on hand: N — new chunks to cut: …". Read-only users (no `canEditJob`) see the groups as text. There's an empty state for a breakdown with no `lines`; prod has 0 such active HB jobs as of today.
+    - **Wiring.** `handleChunkPlanChanged` mirrors `handleFloorStockChanged`: it patches the job and dirty snapshot and invalidates the cut list.
+    - **Display helpers.** `hbChunkPlan.ts` gains `formatFill` (two decimals when an over-fill would otherwise read "50.5"; the API message uses it too), `formatThickness` and `planMismatchParts`. Its selfcheck is now 30/30.
+  - **Cut list — `lib/cutList.ts`.** When `parsePlan(job.hb_chunk_plan)` returns a plan and the chunk toggle is on, it prints **CHUNK LIST** instead of the auto page.
+    - Layout: header `N chunks · custom list · 48×24×50.5"`; rows via the existing `drawChunkTable` in plan order, thickest first within a row, with a right-aligned FILL column (`49.0" fill`).
+    - A mismatched list adds a bold warn line: `DOES NOT MATCH ORDER — short 12 × 4"; over 2 × 1"`.
+    - The FLOOR STOCK block is now a shared local `drawFloorStock` helper used by both branches. On the plan page, new chunks = max(0, total − on hand).
+    - **No plan = unchanged output.** `cutList.selfcheck.ts` (12/12) compares inflated page streams with pdf-lib's per-document font resource suffixes normalised. The two pre-change fingerprints were recorded on `71f12fd` and confirmed stable across runs.
+  - **Callers.** `OrderEditModal` and `OrderDetailModal` (both read `GET /v2/api/board/:id`) pass `hb_chunk_plan`. `OrderEntryForm` passes `null` because the orders payload doesn't carry it (see BACKLOG). `CutListChunkToggle` now reads "Include chunk list"; its behaviour is unchanged.
+  - **Verified.**
+    - Selfchecks pass, `tsc --noEmit` passes, and `npm run cf-build` is green (on-color guard OK).
+    - Playwright smoke on `next dev` with the board GET and plan PUT mocked (the migration hasn't run). Light at tablet width and dark at phone width: open an HB order, add 2 groups, see the fill and NEEDED update, trigger an over-fill (62.3", Save disabled), get a mocked 400 shown verbatim, Save → "Custom · 7 chunks", Revert → "Auto (max yield)".
+    - The CHUNK LIST page was rasterised and checked visually.
+
 - **hbplan-01 — custom Holey Board chunk list: schema, pure logic, API, count wiring (DB/API Agent §9 for the migration, Next/Cloudflare Platform Agent §9a for the v2 code). MIGRATION: `DB_Migrations/hb-chunk-plan.sql` (`ALTER TABLE jobs ADD COLUMN hb_chunk_plan TEXT`), which must run before this is pushed.** v2 only: legacy `_worker.js` and `jobs/index.html` are untouched. There's no middleware change (the new route sits under `/v2/api/board`, already gated `jobs` edit). No UI yet (that's hbplan-02).
   - **Why.** The FFD auto nest mixes thicknesses per chunk, which means too many wire changes, so the floor doesn't use it. Managers build the chunk list by hand as recipe groups: `{count, pieces:[{thickness, qty}]}` means "cut `count` chunks, each into these pieces". The auto nest stays the fallback when no list exists.
   - **Pure logic — new `src/lib/hbChunkPlan.ts`.** It uses `HB_CHUNK_HEIGHT` / `HB_KERF` from `holeyNester.ts`.
