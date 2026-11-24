@@ -64,6 +64,7 @@
 // with a dashed line marking the load's doors-side end.
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import type { Dimensions, PackColumn, PackRow, PackTrailer, PackSku } from "./packEngine";
+import { TRAILER_TYPES } from "./packEngine";
 import { thicknessColor } from "./thicknessPalette";
 import { stackBands } from "./stackBands";
 import { isZonedTrailer, loadOrderWallToDoors, zoneBand, zoneCellsOf, zoneOutlineEdges, zoneSegments } from "./zoneLayout";
@@ -369,10 +370,10 @@ const BOL_SIZE = 16;
 const BOL_MIN_SIZE = 12;
 const BOL_GAP = 16; // minimum space between the title and the BOL #
 
-/** Draws "BOL # …" right-aligned on a title row (baseline `y`) whose title is `title`: bold 16pt
- * INK, shrinking to 12pt and then truncating so it never runs into the title; "BOL # —" in MUTED
- * when there's no number. */
-function drawBolLabel(page: PDFPage, fontBold: PDFFont, title: string, bol: string | null, y: number) {
+/** lb-diag-04: where "BOL # …" lands on a title row whose title is `title` — bold 16pt, shrinking to
+ * 12pt and then truncating so it never runs into the title. Pure (font metrics only) so the
+ * selfcheck can measure it; drawBolLabel and the centred trailer type both use it. */
+export function bolLabelLayout(fontBold: PDFFont, title: string, bol: string | null): { text: string; size: number; x: number; width: number } {
   const text = `BOL # ${bol ?? "—"}`;
   const right = PAGE_WIDTH - MARGIN;
   const room = right - (MARGIN + fontBold.widthOfTextAtSize(title, TITLE_SIZE) + BOL_GAP);
@@ -380,7 +381,48 @@ function drawBolLabel(page: PDFPage, fontBold: PDFFont, title: string, bol: stri
   while (size > BOL_MIN_SIZE && fontBold.widthOfTextAtSize(text, size) > room) size -= 1;
   const fitted = fitText(fontBold, text, size, room);
   const width = fontBold.widthOfTextAtSize(fitted, size);
-  page.drawText(fitted, { x: right - width, y, size, font: fontBold, color: bol ? INK : MUTED });
+  return { text: fitted, size, x: right - width, width };
+}
+
+/** Draws "BOL # …" right-aligned on a title row (baseline `y`) whose title is `title`: bold 16pt
+ * INK, shrinking to 12pt and then truncating so it never runs into the title; "BOL # —" in MUTED
+ * when there's no number. */
+function drawBolLabel(page: PDFPage, fontBold: PDFFont, title: string, bol: string | null, y: number) {
+  const l = bolLabelLayout(fontBold, title, bol);
+  page.drawText(l.text, { x: l.x, y, size: l.size, font: fontBold, color: bol ? INK : MUTED });
+}
+
+/** lb-diag-04: the truck type printed top-centre on the diagram — the trailer's stamped `type`, else
+ * (an old saved plan with no stamp) the TRAILER_TYPES key whose length / width / height exactly match
+ * `dims`, else null (nothing drawn — never a guess). */
+export function diagramTrailerTypeLabel(trailer: PackTrailer, dims: Dimensions): string | null {
+  const stamped = trailer.type?.trim();
+  if (stamped) return stamped;
+  for (const [name, d] of Object.entries(TRAILER_TYPES)) {
+    if (d.length === dims.length && d.width === dims.width && d.height === dims.height) return name;
+  }
+  return null;
+}
+
+const TYPE_SIZE = 16;
+const TYPE_MIN_SIZE = 12;
+
+/** lb-diag-04: the centred trailer-type label's layout on the title row, clear of the title's right
+ * edge and the BOL label's left edge (`bolX`) by BOL_GAP each: 16pt centred on the page, else 12pt
+ * centred, else fitText'd at 12pt and centred in the gap between them. Null when there's no room. */
+export function trailerTypeLayout(fontBold: PDFFont, title: string, bolX: number, label: string): { text: string; size: number; x: number; width: number } | null {
+  const lo = MARGIN + fontBold.widthOfTextAtSize(title, TITLE_SIZE) + BOL_GAP;
+  const hi = bolX - BOL_GAP;
+  const text = pdfSafe(label);
+  for (const size of [TYPE_SIZE, TYPE_MIN_SIZE]) {
+    const width = fontBold.widthOfTextAtSize(text, size);
+    const x = PAGE_WIDTH / 2 - width / 2;
+    if (x >= lo && x + width <= hi) return { text, size, x, width };
+  }
+  const fitted = fitText(fontBold, text, TYPE_MIN_SIZE, hi - lo);
+  const width = fontBold.widthOfTextAtSize(fitted, TYPE_MIN_SIZE);
+  if (width > hi - lo) return null;
+  return { text: fitted, size: TYPE_MIN_SIZE, x: (lo + hi) / 2 - width / 2, width };
 }
 
 /** Builds one trailer's loading-diagram PDF: the top-down layout, a pieces table, a stack
@@ -407,6 +449,10 @@ export async function buildLoadingDiagramPdf(
   const title = `Trailer ${trailerIndex + 1} Loading Diagram`;
   page.drawText(title, { x: MARGIN, y: cursorY - 20, size: TITLE_SIZE, font: fontBold, color: INK });
   drawBolLabel(page, fontBold, title, header.bol, cursorY - 20);
+  // lb-diag-04: the truck type, centred on the title row (first page only — not on "(cont.)" pages).
+  const typeLabel = diagramTrailerTypeLabel(trailer, dims);
+  const typeLayout = typeLabel ? trailerTypeLayout(fontBold, title, bolLabelLayout(fontBold, title, header.bol).x, typeLabel) : null;
+  if (typeLayout) page.drawText(typeLayout.text, { x: typeLayout.x, y: cursorY - 20, size: typeLayout.size, font: fontBold, color: INK });
   cursorY -= 26;
   page.drawText(`${dims.length}"L × ${dims.width}"W × ${dims.height}"H${header.subtitleSuffix}`, { x: MARGIN, y: cursorY - 12, size: 12, font, color: MUTED });
   cursorY -= 22;

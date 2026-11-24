@@ -27,6 +27,9 @@ import {
   loadNoseEnd,
   END_LABEL_SIZE,
   diagramHeaderText,
+  diagramTrailerTypeLabel,
+  bolLabelLayout,
+  trailerTypeLayout,
 } from "./loadingDiagramPdf";
 import { pack, TRAILER_TYPES, DEFAULT_PACK_OPTIONS, HOLEY_BOARD_CATEGORY } from "./packEngine";
 import { thicknessColor } from "./thicknessPalette";
@@ -379,6 +382,36 @@ export async function runLoadingDiagramPdfSelfCheck(): Promise<{ pass: boolean; 
     check("lb-diag-02 header: neither -> no BOL, empty suffix", same(diagramHeaderText({}), null, "") && same(diagramHeaderText({ bolNumber: "  ", invoiceNumber: "" }), null, ""));
   }
 
+  // lb-diag-04: the truck type, printed centred on the title row. Stamped type wins; an old plan with
+  // no stamp falls back to an exact TRAILER_TYPES dims match; anything else draws nothing.
+  {
+    const t = makeFixture();
+    const d53 = TRAILER_TYPES["53ft Standard"];
+    const dBox = TRAILER_TYPES["26ft Box Truck"];
+    check("lb-diag-04 type: stamped type wins (trimmed)", diagramTrailerTypeLabel({ ...t, type: "  26ft Box Truck " }, d53) === "26ft Box Truck");
+    check("lb-diag-04 type: no stamp, 53ft dims -> 53ft Standard", diagramTrailerTypeLabel(t, { ...d53 }) === "53ft Standard");
+    check("lb-diag-04 type: no stamp, 26ft box dims -> 26ft Box Truck", diagramTrailerTypeLabel({ ...t, type: "  " }, { ...dBox }) === "26ft Box Truck");
+    check("lb-diag-04 type: no stamp, no exact match -> null", diagramTrailerTypeLabel(t, DIMS) === null && diagramTrailerTypeLabel(t, { ...d53, height: 108 }) === null);
+
+    const fontBold = await (await PDFDocument.create()).embedFont(StandardFonts.HelveticaBold);
+    const title = "Trailer 12 Loading Diagram";
+    const titleRight = 36 + fontBold.widthOfTextAtSize(title, 20);
+    const bol = bolLabelLayout(fontBold, title, "4527-03");
+    const ty = trailerTypeLayout(fontBold, title, bol.x, "26ft Box Truck");
+    check("lb-diag-04 type: widest realistic row keeps the type at 16pt", !!ty && ty.size === 16 && ty.text === "26ft Box Truck", JSON.stringify(ty));
+    check("lb-diag-04 type: centred on the page", !!ty && Math.abs(ty.x + ty.width / 2 - 396) < 1e-6, JSON.stringify(ty));
+    check("lb-diag-04 type: clears the title and the BOL # by BOL_GAP (16)", !!ty && ty.x - titleRight >= 16 - 1e-9 && bol.x - (ty.x + ty.width) >= 16 - 1e-9, ty ? `left ${(ty.x - titleRight).toFixed(1)} right ${(bol.x - ty.x - ty.width).toFixed(1)}` : "null");
+    const clears = (l: ReturnType<typeof trailerTypeLayout>) => !!l && l.x - titleRight >= 16 - 1e-9 && bol.x - (l.x + l.width) >= 16 - 1e-9;
+    const midTy = trailerTypeLayout(fontBold, title, bol.x, "Customer Supplied Extra Long Specialty Trailer Type");
+    check("lb-diag-04 type: a type too wide to centre drops to 12pt in the gap, clear of both ends", !!midTy && midTy.size === 12 && !midTy.text.endsWith("...") && clears(midTy), JSON.stringify(midTy));
+    const longTy = trailerTypeLayout(fontBold, title, bol.x, "Customer Supplied Extra Long Specialty Trailer Type With Lift Gate And Reefer");
+    check("lb-diag-04 type: a type too wide for the gap is truncated at 12pt, clear of both ends", !!longTy && longTy.size === 12 && longTy.text.endsWith("...") && clears(longTy), JSON.stringify(longTy));
+    const page0 = pageText(await PDFDocument.load(await buildLoadingDiagramPdf({ ...t, type: "26ft Box Truck" }, 11, DIMS, SKUS, { bolNumber: "4527-03" })), 0);
+    check("lb-diag-04 type: the PDF prints the stamped type", page0.split("\n").includes("26ft Box Truck"), page0.split("\n").slice(0, 4).join(" | "));
+    const page1 = pageText(await PDFDocument.load(await buildLoadingDiagramPdf(t, 0, DIMS, SKUS)), 0);
+    check("lb-diag-04 type: an unmatched, unstamped trailer prints no type", !Object.keys(TRAILER_TYPES).some((k) => page1.split("\n").includes(k)));
+  }
+
   // filterTrailerWarnings: only this trailer's lines, prefix-matched exactly (not a substring match
   // that would also catch "trailer 10 ..." for trailerIndex 1).
   {
@@ -482,7 +515,9 @@ export async function runLoadingDiagramPdfSelfCheck(): Promise<{ pass: boolean; 
     const plain = pack(FOUR_ZONE.map(({ skuId, qty }) => ({ skuId, qty })), FOUR_ZONE_SKUS, TRAILER_TYPES["53ft Standard"], DEFAULT_PACK_OPTIONS);
     const pt = plain.trailers[0];
     const streams = await allStreams(await buildLoadingDiagramPdf(pt, 0, pt.dims, FOUR_ZONE_SKUS, { runnerHeight: 4, bolNumber: "4511-01", invoiceNumber: "4511", warnings: plain.warnings }));
-    check("lbz-v2-03: non-zoned page content unchanged (golden c467ba32, 54935 bytes)", fnv(streams) === "c467ba32" && streams.length === 54935, `${fnv(streams)} ${streams.length}`);
+    // lb-diag-04 re-recorded this golden: the only content change is the centred "53ft Standard" text
+    // block on the title row (verified by diffing the streams with font resource names normalised).
+    check("lbz-v2-03: non-zoned page content unchanged (golden 9b59d085, 55059 bytes)", fnv(streams) === "9b59d085" && streams.length === 55059, `${fnv(streams)} ${streams.length}`);
     const rects = fnv(JSON.stringify(layoutColumnRects(pt, pt.dims, { x: 66, yTop: 500, width: 660, height: 190 })));
     check("lbz-v2-03: non-zoned layout rects unchanged (golden f711b66c)", rects === "f711b66c", rects);
 
