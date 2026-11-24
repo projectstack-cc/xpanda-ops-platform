@@ -380,7 +380,7 @@
 > fallback. Both boards are in **active testing**; legacy retirement (jb-09) has no date. Reuses `jobs` +
 > `job_line_items`; no new schema.
 
-- [ ] **Orders desk:** ord-dash-03 batch slip drop (flag slips mentioning OFFLOAD / DELIVER / LABEL that yield no zones, per slip-parse-08's BACKLOG item; reuse `lib/orders/deskLabels.ts`), ord-dash-04 cutover (held). ord-dash-01 (`GET /v2/api/orders/desk`) and ord-dash-02 (`/v2/orders/desk` UI, dark) shipped.
+- [ ] **Orders desk:** ord-dash-03 batch slip drop (flag slips whose text matches an ordinal wording (OFFLOAD / DELIVER / `<ORD> TO DELIVER`) but yield no zones, per the slip-parse-08/10 BACKLOG item; reuse `lib/orders/deskLabels.ts`), ord-dash-04 cutover (held). ord-dash-01 (`GET /v2/api/orders/desk`) and ord-dash-02 (`/v2/orders/desk` UI, dark) shipped.
 - [ ] **Orders desk i18n (en/es/ht).** `/v2/orders/desk` is English-only (like Reports); move its strings and `deskLabels.ts` labels to the lang dictionaries.
 - [ ] **Desk Edit omits `boardJobs`**, so trailer-group link candidates are empty in the desk's Edit modal; pass a candidate list if Steve links trailers from the desk.
 - [ ] **Orders desk — density conflicts aren't persisted.** If the desk should flag them, store a per-line flag at create (schema change).
@@ -422,8 +422,14 @@
   shows this yet. Add a fixture and narrow the rule if one turns up. (slip-parse-08)
 - [ ] Packing-slip zones: only three zone wordings are known (`OFFLOAD <ord>` + `Label & segregate as:`,
   `<ord> TO DELIVER >` + `LABEL as`, and `DELIVER <ord> - LABEL <ZONE>` from INV 4575). Batch upload should
-  surface an order whose slip mentions OFFLOAD / DELIVER / LABEL but yields no zones, so a fourth wording
-  isn't silently missed. (slip-parse-08)
+  surface an order whose slip text matches an **ordinal** wording (OFFLOAD / DELIVER / `<ORD> TO DELIVER`)
+  but yields no zones, so a fourth wording isn't silently missed. LABEL alone is never a zone signal
+  (slip-parse-10: zones require an ordinal). (slip-parse-08, reworded slip-parse-10)
+- [ ] Packing-slip zones: on a slip that IS zoned (has an ordinal somewhere), any `LABEL as …` /
+  `Label & segregate as:` line still opens or switches a zone, so an unrelated product label note (e.g. a
+  row's continuation text `LABEL as SPARES`) would be read as a zone label: the rows after it get re-zoned
+  and a `missing_ordinal` warning appears. No real slip shows this yet. Add a fixture if one turns up.
+  (slip-parse-10)
 - [ ] Packing-slip parse: QuickBooks lines are hand-typed. Add a fixture for each new miss Steve finds (the harness is the regression net). (slip-parse-07)
 - [ ] Packing-slip parser rewrite (anchor-relative extraction + per-vendor template registry) —
   P340 ported the existing y-coordinate/x-gap heuristic parser as-is into v2; the more robust

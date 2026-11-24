@@ -451,10 +451,13 @@ function parseLineItems(groups: LineGroup[], descriptionY: number): ParsedLineIt
 
   if (current) items.push(current);
 
+  // slip-parse-10: computed before the notes filter — on a slip with no ordinal, bare notes drop out.
+  const slipZoned = slipHasZoneOrdinal(items);
+
   return items
     .filter((item) => {
       // slip-parse-08: a bare notes row carrying a zone marker survives to tagOffloadZones(), which drops it.
-      if (item._bareNotes && hasZoneMarker(item._descLines || [])) return true;
+      if (item._bareNotes && slipZoned && hasZoneMarker(item._descLines || [])) return true; // slip-parse-10: zoned slips only
       if (item._isNotes) return false;
       if (/credit card|processing fee/i.test((item.category || "") + " " + (item._descLines || []).join(" ") + " " + (item.description || ""))) return false;
       if (!item.quantity || item.quantity <= 0) return false;
@@ -526,8 +529,10 @@ function dropHbBdftSummaries(items: ParsedLineItem[]): ParsedLineItem[] {
 // ─── Offload zone detection ───────────────────────────────────────────────
 // slip-parse-05: verbatim behavioral port of legacy lbz-parse-01 (jobs/packing-slip-parser.js) —
 // same regexes, constants and order of operations. Some customer packing slips break a job into
-// delivery "zones" — pieces must be offloaded/labeled in a specific sequence per drop area. Two
-// real wordings are known; add a new one as a single entry in each list below (in BOTH parsers).
+// delivery "zones" — pieces must be offloaded/labeled in a specific sequence per drop area. Three
+// real wordings are known (lbz-parse-01's two, plus INV 4575's `DELIVER <ORD> - LABEL …` from
+// slip-parse-08); add a new one as a single entry in each list below (in BOTH parsers).
+// slip-parse-10: zones require an ordinal somewhere on the slip — label wording alone never zones.
 const ZONE_ORDINAL_WORDS: Record<string, number> = { FIRST: 1, SECOND: 2, THIRD: 3, FOURTH: 4, FIFTH: 5, SIXTH: 6 };
 
 const ZONE_ORDINAL_PATTERNS = [
@@ -584,6 +589,16 @@ function hasZoneMarker(lines: string[]): boolean {
   return lines.some((t) => extractZoneOrdinal(t) != null || extractZoneLabel(t) != null);
 }
 
+// slip-parse-10: a slip is zoned only if some row carries a zone ORDINAL. "We label all sorts of
+// parts that aren't zoned" (Steve), so without one, label wording has no zone meaning. Scans the
+// same lines tagOffloadZones() does (_zoneLines, else category + continuation lines, which also
+// covers a bare-notes item's _descLines before parseLineItems() builds _zoneLines).
+function slipHasZoneOrdinal(items: ParsedLineItem[]): boolean {
+  return items.some((item) =>
+    (item._zoneLines || [item.category || "", ...(item._descLines || [])])
+      .some((t) => extractZoneOrdinal(t) != null));
+}
+
 function extractBracePieceCount(text: string | undefined): number | null {
   if (!text) return null;
   const m = text.match(ZONE_BRACE_PIECES_RE);
@@ -608,6 +623,9 @@ function tagOffloadZones(items: ParsedLineItem[]): {
   zonesFound: number;
   warnings: OffloadWarning[];
 } {
+  // slip-parse-10: no ordinal anywhere on the slip → not zoned; every row passes through untouched.
+  if (!slipHasZoneOrdinal(items)) return { items, zonesFound: 0, warnings: [] };
+
   const zoneInfo = new Map<string, { display: string; seq: number | null }>();
   const warnings: OffloadWarning[] = [];
   const tagged: ParsedLineItem[] = [];

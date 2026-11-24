@@ -31,6 +31,7 @@ export interface SlipFixture {
       | { type: "missing_ordinal"; zone_label: string }
     >;
     line_items: Array<{
+      category?: string; // slip-parse-10
       quantity: number;
       description?: string;
       dimensions?: string;
@@ -251,6 +252,31 @@ const SYN_ZONED_B = synthSlip("9102", [
 const SYN_DENSITY_CONFLICT = synthSlip("9103", [
   { cat: HB_CAT("2.0"), qty: 12, desc: [HB_DESC("1.0", '6.25"')] },
   hbRow(5, "7.25"),
+]);
+
+// ─── Label wording on unzoned slips (slip-parse-10) ───────────────────────
+// Steve: "Label shouldn't affect zones because we label all sorts of parts that aren't 'zoned'." No
+// row on these slips carries a zone ordinal, so the label wording has no zone meaning: unzoned, no
+// warnings, every row an ordinary line item. Expectations are Steve's rule (legacy after the fix).
+// 9108: label wording as an item header's category (qty 1, thickness in its description).
+const SYN_LABEL_HEADER = synthSlip("9108", [
+  hbRow(10, "5.25"),
+  hbRow(8, "6.25"),
+  { cat: "LABEL as PANEL 3", qty: 1, desc: [HB_DESC("1.0", '7.25"')] },
+  hbRow(5, "8.25"),
+]);
+// 9109: label wording in a row's continuation text — it stays in that line's description.
+const SYN_LABEL_CONT = synthSlip("9109", [
+  { cat: HB_CAT("1.0"), qty: 10, desc: [HB_DESC("1.0", '5.25"'), "Label & segregate as: SPA COVERS -"] },
+  hbRow(8, "6.25"),
+  hbRow(5, "7.25"),
+]);
+// 9110: a qty-less bare `notes` row carrying only label wording — dropped like any notes item. The
+// prompt's `LABEL EACH PIECE WITH PO` matches no label pattern (unzoned on unchanged code, proving
+// nothing), so the note uses `LABEL as …` wording, which did zone the slip before slip-parse-10.
+const SYN_LABEL_NOTES = synthSlip("9110", [
+  { cat: HB_CAT("1.0"), qty: 10, desc: [HB_DESC("1.0", '5.25"'), "notes", "LABEL as PO 4471 - EACH PIECE"] },
+  hbRow(8, "6.25"),
 ]);
 
 // ─── Synthetic page-break slips (slip-parse-09) ───────────────────────────
@@ -1071,6 +1097,55 @@ export const SLIP_FIXTURES: SlipFixture[] = [
         { quantity: 10, dimensions: '4" x 48" x 144"', description: "Foam Block 1.0# RC - PLAIN" },
         { quantity: 12, dimensions: "", description: "Foam Block 1.0# RC - PLAIN" },
         { quantity: 6, dimensions: '8" x 48" x 96"', description: "Foam Block 1.0# RC - PLAIN" },
+      ],
+    },
+  },
+  {
+    name: "SYN 9108 — LABEL as … header on an unzoned slip, ordinary item",
+    items: SYN_LABEL_HEADER,
+    expect: {
+      invoice_number: "9108",
+      offload_zones_enabled: 0,
+      offload_warnings: [],
+      line_items: [
+        { quantity: 10, thickness: 5.25, offload_seq: null, zone_label: null, zone_bdft: null },
+        { quantity: 8, thickness: 6.25, offload_seq: null, zone_label: null, zone_bdft: null },
+        { category: "LABEL as PANEL 3", quantity: 1, thickness: 7.25, offload_seq: null, zone_label: null, zone_bdft: null },
+        { quantity: 5, thickness: 8.25, offload_seq: null, zone_label: null, zone_bdft: null },
+      ],
+    },
+  },
+  {
+    name: "SYN 9109 — Label & segregate in continuation text, unzoned",
+    items: SYN_LABEL_CONT,
+    expect: {
+      invoice_number: "9109",
+      offload_zones_enabled: 0,
+      offload_warnings: [],
+      line_items: [
+        {
+          quantity: 10,
+          thickness: 5.25,
+          description: "Holey Board 1.0# - RC 2' x 4' (24\" x 48\") 5.25\" Label & segregate as: SPA COVERS -",
+          offload_seq: null,
+          zone_label: null,
+          zone_bdft: null,
+        },
+        { quantity: 8, thickness: 6.25, offload_seq: null, zone_label: null, zone_bdft: null },
+        { quantity: 5, thickness: 7.25, offload_seq: null, zone_label: null, zone_bdft: null },
+      ],
+    },
+  },
+  {
+    name: "SYN 9110 — bare notes row with label wording only, dropped",
+    items: SYN_LABEL_NOTES,
+    expect: {
+      invoice_number: "9110",
+      offload_zones_enabled: 0,
+      offload_warnings: [],
+      line_items: [
+        { quantity: 10, thickness: 5.25, offload_seq: null, zone_label: null, zone_bdft: null },
+        { quantity: 8, thickness: 6.25, offload_seq: null, zone_label: null, zone_bdft: null },
       ],
     },
   },
